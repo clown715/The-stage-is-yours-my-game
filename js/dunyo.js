@@ -9,8 +9,8 @@ const Dunyo = {};
   const KOL = { x: 46, z: -34, r: 24 };   // ko‘l markazi va radiusi
   const SUV_Y = -1.0;
   const BOYI = 440;
-  const MAX_DARAXT = 240, MAX_GUL = 400, MAX_TOSH = 46, MAX_OT = 9000, MAX_ZARRA = 150;
-  const OT_R = 80, OT_G = 1.0;
+  const MAX_DARAXT = 240, MAX_GUL = 400, MAX_TOSH = 46, MAX_OT = 40000, MAX_ZARRA = 150;
+  const OT_R = 48;   // o‘t kamera atrofida shu radiusda quriladi, 40 m dan uzoqdagisi ko‘rinmaydi
 
   function mulberry(a) {
     return function () {
@@ -101,7 +101,7 @@ const Dunyo = {};
   let grup, rnd;
   let terra, suvMesh, suvMat;
   let tanaMesh, bargMesh, gulSaqich, gulBosh, toshMesh;
-  let otMesh, otMat, otMerkez = { x: 1e9, z: 1e9 }, otZichlik = 1;
+  let otMesh, otMat, otMerkez = { x: 1e9, z: 1e9 }, otButce = 15000, otPq = 0, otG = 1.0;
   let zarraGeo, zarraMat, zarraPos, zarraFaza, zarraBal, zarraSoni = 90;
   let daraxtSoni = 160;
   const toqnashuvDaraxt = [], toqnashuvTosh = [];
@@ -239,62 +239,59 @@ const Dunyo = {};
     grup.add(tanaMesh, bargMesh);
   }
 
-  /* ---------- o‘t (InstancedMesh, shamolda tebranadi; har pichoq har xil) ---------- */
+  /* ---------- o‘t: har bir pichoq alohida (InstancedMesh), tutamlarda o‘sadi ----------
+     H — personajning balandligi (~1.45 m). Pichoq balandligi 0.08H–0.30H (o‘rtacha ~0.15H),
+     asosining kengligi 0.01H–0.02H, uchi o‘tkir. Tutamda 5–12 ta pichoq, tutamlar orasida bo‘sh joy bor. */
   function otYasa() {
-    const pos = [], tas = [];
-    const rr = mulberry(777);
-    for (let b = 0; b < 7; b++) {
-      const a = rr() * 6.283, ox = (rr() - 0.5) * 0.6, oz = (rr() - 0.5) * 0.6;
-      const w = 0.03 + rr() * 0.045, ht = 0.2 + rr() * 0.35, lean = (rr() - 0.5) * 0.4, q = rr();
-      const ca = Math.cos(a), sa = Math.sin(a);
-      const P = function (lx, ly) { return [ox + lx * ca, ly, oz - lx * sa]; };
-      const A = P(-w, 0), B = P(w, 0), C = P(lean, ht);
-      pos.push(A[0], A[1], A[2], B[0], B[1], B[2], C[0], C[1], C[2]);
-      tas.push(q, q, q);
-    }
+    // bitta pichoq: pastki qism (2 uch), o‘rtasi (2 uch), uchi (1 uch). Uchlar rangi: tagi to‘q, uchi och yashil
     const g = new THREE.BufferGeometry();
-    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-    g.setAttribute('aR', new THREE.Float32BufferAttribute(tas, 1));
+    g.setAttribute('position', new THREE.Float32BufferAttribute([
+      -0.5, 0, 0,   0.5, 0, 0,   -0.25, 0.5, 0,   0.25, 0.5, 0,   0, 1, 0
+    ], 3));
+    g.setAttribute('color', new THREE.Float32BufferAttribute([
+      0.08, 0.30, 0.16,   0.08, 0.30, 0.16,   0.23, 0.58, 0.32,   0.23, 0.58, 0.32,   0.66, 0.90, 0.44
+    ], 3));
+    g.setIndex([0, 1, 2, 1, 3, 2, 2, 3, 4]);
 
     otMat = new THREE.ShaderMaterial({
       uniforms: THREE.UniformsUtils.merge([THREE.UniformsLib.fog, { uT: { value: 0 }, uP: { value: new THREE.Vector3() } }]),
       vertexShader: [
-        'attribute float aR;',
         'uniform float uT; uniform vec3 uP;',
-        'varying float vH; varying float vM; varying float vR;',
+        'varying vec3 vC; varying float vH;',
         '#include <fog_pars_vertex>',
         'void main(){',
         '  vec3 p = position;',
-        '  vH = clamp(p.y / 0.55, 0.0, 1.0);',
-        '  vR = aR;',
-        '  vec3 base = (instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xyz;',
+        '  vH = p.y;',
+        '  vec3 base = vec3(instanceMatrix[3][0], instanceMatrix[3][1], instanceMatrix[3][2]);',
+        '  float h1 = fract(sin(dot(base.xz, vec2(12.9898, 78.233))) * 43758.5453);',
+        '  float h2 = fract(sin(dot(base.xz, vec2(39.346, 11.135))) * 24634.6345);',
+        '  float bh = instanceMatrix[1][1];',
         '  float d = length(base.xz - uP.xz);',
-        '  p.y *= 1.0 - smoothstep(40.0, 66.0, d);',
-        '  p.x += (aR - 0.5) * 0.3 * vH * vH;',
+        '  p.y *= 1.0 - smoothstep(32.0, 40.0, d);',        // uzoqdagilar yo‘qoladi
+        '  p.z += (h1 * 0.7 - 0.1) * p.y * p.y;',           // har pichoqning egilishi
         '  vec4 ip = instanceMatrix * vec4(p, 1.0);',
-        '  float w = sin(uT*1.8 + base.x*0.35 + base.z*0.27) + sin(uT*2.7 + base.x*0.9)*0.4;',
-        '  ip.x += w * 0.12 * vH * vH;',
-        '  ip.z += w * 0.07 * vH * vH;',
-        '  vM = fract(sin(base.x*12.9898 + base.z*78.233) * 43758.5453);',
+        '  float w = sin(uT*1.8 + base.x*0.35 + base.z*0.27) + 0.4*sin(uT*2.7 + base.x*0.9 + base.z*0.5);',
+        '  float k = p.y * p.y * bh;',
+        '  ip.x += w * 0.28 * k;',                          // shamolda biroz tebranish
+        '  ip.z += w * 0.16 * k;',
+        '  vC = color * (0.85 + 0.3 * h2);',
+        '  float sariq = step(0.9, fract(h1 * 7.31));',
+        '  vC = mix(vC, vC * vec3(1.3, 1.1, 0.55), sariq * 0.6 * vH);',
         '  vec4 mvPosition = modelViewMatrix * ip;',
         '  gl_Position = projectionMatrix * mvPosition;',
         '  #include <fog_vertex>',
         '}'
       ].join('\n'),
       fragmentShader: [
-        'varying float vH; varying float vM; varying float vR;',
+        'varying vec3 vC; varying float vH;',
         '#include <fog_pars_fragment>',
         'void main(){',
-        '  vec3 baseC = mix(vec3(0.14,0.48,0.30), vec3(0.20,0.58,0.34), vR);',
-        '  vec3 tip = mix(vec3(0.55,0.88,0.40), vec3(0.78,0.92,0.45), vM);',
-        '  vec3 c = mix(baseC, tip, vH);',
-        '  c = mix(c, vec3(0.30,0.72,0.62), step(0.9, vM) * 0.35);',
-        '  c *= 0.88 + 0.24 * vR;',
-        '  gl_FragColor = vec4(c, 1.0);',
+        '  gl_FragColor = vec4(vC, 1.0);',
         '  #include <fog_fragment>',
         '}'
       ].join('\n'),
       side: THREE.DoubleSide,
+      vertexColors: true,
       fog: true
     });
     otMesh = new THREE.InstancedMesh(g, otMat, MAX_OT);
@@ -303,38 +300,92 @@ const Dunyo = {};
     grup.add(otMesh);
   }
 
-  // O‘tni o‘yinchi atrofida qayta joylashtirish (dunyo katakchalariga bog‘langan, shuning uchun sakramaydi).
-  // Gruppa-gruppa: shovqin bo‘yicha zich va siyrak joylar hosil bo‘ladi.
-  function otYangila(cx, cz) {
-    otMerkez = { x: cx, z: cz };
-    const ci0 = Math.round(cx / OT_G), cj0 = Math.round(cz / OT_G);
-    const N = Math.ceil(OT_R / OT_G) + 1;
-    let k = 0;
-    for (let i = -N; i <= N && k < MAX_OT; i++) {
+  const PERSONAJ_H = 1.45;                 // personaj balandligi (metr)
+  const otTmp = new Float32Array(MAX_OT * 16);
+  const OT_TUTAM_R = 0.09;                 // tutam radiusi (metr)
+  const nomzodX = new Float32Array(22000), nomzodZ = new Float32Array(22000), nomzodW = new Float32Array(22000);
+  const nomzodY = new Float32Array(22000), nomzodH = new Float32Array(22000), nomzodCI = new Int32Array(22000), nomzodCJ = new Int32Array(22000);
+  const nomzodN = new Uint8Array(22000);
+
+  // O‘tni kamera atrofida qayta joylashtirish. Tutamlar dunyo katakchalariga bog‘langan,
+  // shuning uchun kamera yurganda o‘t sakramaydi.
+  function* otGen(cx, cz) {
+    const ci0 = Math.round(cx / otG), cj0 = Math.round(cz / otG);
+    const N = Math.ceil(OT_R / otG) + 1;
+    let nc = 0, sumW = 0, sana = 0;
+    for (let i = -N; i <= N; i++) {
       for (let j = -N; j <= N; j++) {
+        if (++sana % 1500 === 0) yield;     // ishni kadrlarga bo‘lish (telefonda sekinlashmasligi uchun)
         const ci = ci0 + i, cj = cj0 + j;
-        const gx = ci * OT_G - cx, gz = cj * OT_G - cz;
-        if (gx * gx + gz * gz > (OT_R + OT_G) * (OT_R + OT_G)) continue;
-        const x = (ci + hash(ci * 1.31, cj * 2.17)) * OT_G;
-        const z = (cj + hash(ci * 3.77 + 1.2, cj * 0.57)) * OT_G;
+        const gx = ci * otG - cx, gz = cj * otG - cz;
+        if (gx * gx + gz * gz > (OT_R + otG) * (OT_R + otG)) continue;
+        const x = (ci + hash(ci * 1.31, cj * 2.17)) * otG;
+        const z = (cj + hash(ci * 3.77 + 1.2, cj * 0.57)) * otG;
         const dx = x - cx, dz = z - cz;
         if (dx * dx + dz * dz > OT_R * OT_R) continue;
+        if (Math.hypot(x - KOL.x, z - KOL.z) < KOL.r * 0.98) continue;
+        const yer = balandlik(x, z);
+        if (yer < 0.2) continue;                      // past (qumli) joyda o‘t o‘smaydi
         const katta = ss(0.3, 0.62, vn(x * 0.045 + 20, z * 0.045 - 9));
         const mayda = ss(0.25, 0.7, vn(x * 0.22 + 4, z * 0.22 + 13));
-        const zich = (0.08 + 0.92 * katta) * (0.45 + 0.55 * mayda);
-        if (hash(ci * 0.71 + 3.1, cj * 0.93 + 7.7) > otZichlik * zich) continue;
-        if (Math.hypot(x - KOL.x, z - KOL.z) < KOL.r * 0.98) continue;
-        const h = balandlik(x, z);
-        if (h < 0.2) continue;
-        const sx = 0.7 + hash(ci * 5.3, cj * 1.9) * 0.9;
-        let sy = 0.6 + hash(ci * 9.1, cj * 0.3) * 0.8;
-        if (hash(ci * 6.7 + 2, cj * 3.3) > 0.88) sy *= 1.7;   // ba’zilari balandroq
-        matritsa(otMesh, k++, x, h, z, hash(ci * 2.9, cj * 4.1) * 6.283, sx, sy, sx);
-        if (k >= MAX_OT) break;
+        const w = (0.5 + 0.5 * katta) * (0.7 + 0.3 * mayda);
+        nomzodX[nc] = x; nomzodZ[nc] = z; nomzodW[nc] = w; nomzodY[nc] = yer;
+        nomzodH[nc] = hash(ci * 0.71 + 3.1, cj * 0.93 + 7.7);
+        nomzodCI[nc] = ci; nomzodCJ[nc] = cj;
+        nomzodN[nc] = 5 + Math.floor(hash(ci * 1.7 + 11.3, cj * 0.9 + 2.1) * 8);   // 5..12 pichoq
+        sumW += w;
+        nc++;
       }
     }
-    otMesh.count = k;
+    const byudjet = Math.min(otButce, MAX_OT);
+    if (otPq === 0) otPq = 1.1 * (byudjet / 8.5) / Math.max(sumW, 1);   // sifat darajasiga qarab zichlik
+    let pq = otPq, jami = 0;
+    for (let it = 0; it < 3; it++) {
+      jami = 0;
+      for (let c = 0; c < nc; c++) if (nomzodH[c] < Math.min(1, pq * nomzodW[c])) jami += nomzodN[c];
+      if (jami <= byudjet) break;
+      pq *= byudjet / jami * 0.97;
+    }
+
+    const A = otTmp;
+    let b = 0, oy = 0;
+    for (let c = 0; c < nc && b < byudjet; c++) {
+      if (nomzodH[c] >= Math.min(1, pq * nomzodW[c])) continue;
+      const x = nomzodX[c], z = nomzodZ[c];
+      const h = nomzodY[c];
+      const nb = nomzodN[c];
+      if (b + nb > byudjet) break;
+      if (b - oy >= 1500) { oy = b; yield; }
+      let st = ((nomzodCI[c] * 73856093) ^ (nomzodCJ[c] * 19349663)) >>> 0;
+      if (st === 0) st = 1;
+      for (let q = 0; q < nb; q++) {
+        st ^= st << 13; st >>>= 0; st ^= st >>> 17; st ^= st << 5; st >>>= 0; const r1 = st / 4294967296;
+        st ^= st << 13; st >>>= 0; st ^= st >>> 17; st ^= st << 5; st >>>= 0; const r2 = st / 4294967296;
+        st ^= st << 13; st >>>= 0; st ^= st >>> 17; st ^= st << 5; st >>>= 0; const r3 = st / 4294967296;
+        st ^= st << 13; st >>>= 0; st ^= st >>> 17; st ^= st << 5; st >>>= 0; const r4 = st / 4294967296;
+        const ang = r1 * 6.2832, rad = (0.2 + 0.8 * Math.sqrt(r2)) * OT_TUTAM_R;
+        const dx = Math.cos(ang) * rad, dz = Math.sin(ang) * rad;
+        const th = Math.atan2(dx, dz) + (r3 - 0.5);                      // pichoqlar tutamdan tashqariga qaraydi
+        const bal = PERSONAJ_H * (0.08 + 0.22 * r4 * r4);                // 0.08H..0.30H, o‘rtacha ~0.15H
+        const eni = PERSONAJ_H * (0.01 + 0.01 * ((r1 * 7.3 + r3 * 3.1) % 1));   // 0.01H..0.02H
+        const cs = Math.cos(th), sn = Math.sin(th), o = b * 16;
+        A[o] = eni * cs; A[o + 1] = 0; A[o + 2] = -eni * sn; A[o + 3] = 0;
+        A[o + 4] = 0; A[o + 5] = bal; A[o + 6] = 0; A[o + 7] = 0;
+        A[o + 8] = bal * sn; A[o + 9] = 0; A[o + 10] = bal * cs; A[o + 11] = 0;
+        A[o + 12] = x + dx; A[o + 13] = h - 0.01; A[o + 14] = z + dz; A[o + 15] = 1;
+        b++;
+      }
+    }
+    otMesh.instanceMatrix.array.set(otTmp.subarray(0, b * 16));    // tayyor bo‘lgach birdan almashtiriladi
+    otMesh.count = b;
     otMesh.instanceMatrix.needsUpdate = true;
+    otMerkez = { x: cx, z: cz };
+  }
+  let otIsh = null;
+  function otYangila(cx, cz) {            // bir zumda (grafika sifati o‘zgarganda)
+    otIsh = null;
+    const g = otGen(cx, cz);
+    while (!g.next().done) { /* tugaguncha */ }
   }
 
   /* ---------- gullar ---------- */
@@ -506,18 +557,23 @@ const Dunyo = {};
 
   Dunyo.yangila = function (dt, t, p) {
     otMat.uniforms.uT.value = t;
-    otMat.uniforms.uP.value.copy(p);
+    const kam = Sahna.camera.position;
+    otMat.uniforms.uP.value.set(kam.x, 0, kam.z);
     suvMat.uniforms.uT.value = t;
-    const dx = p.x - otMerkez.x, dz = p.z - otMerkez.z;
-    if (dx * dx + dz * dz > 14 * 14) otYangila(p.x, p.z);
+    if (otIsh) {
+      if (otIsh.next().done) otIsh = null;
+    } else {
+      const dx = kam.x - otMerkez.x, dz = kam.z - otMerkez.z;
+      if (dx * dx + dz * dz > 6 * 6) otIsh = otGen(kam.x, kam.z);   // kamera 6 m siljisa, o‘t yangidan quriladi
+    }
     zarralarniYangila(dt, t, p);
   };
 
   // Grafika sifatiga qarab ob’ektlar sonini o‘zgartirish
   const SIFAT = {
-    past:   { d: 90,  o: 0.2, g: 120, z: 40 },
-    orta:   { d: 160, o: 0.5, g: 250, z: 90 },
-    yuqori: { d: 240, o: 1.0, g: 400, z: 150 }
+    past:   { d: 90,  gg: 1.4, o: 6000, g: 120, z: 40 },
+    orta:   { d: 160, gg: 1.0, o: 15000, g: 250, z: 90 },
+    yuqori: { d: 240, gg: 0.6, o: 40000, g: 400, z: 150 }
   };
   Dunyo.sifatOrnat = function (nom, p) {
     const q = SIFAT[nom];
@@ -528,8 +584,10 @@ const Dunyo = {};
     gulSaqich.count = gulBosh.count = g;
     zarraSoni = q.z;
     zarraGeo.setDrawRange(0, zarraSoni);
-    otZichlik = q.o;
-    otYangila(p.x, p.z);
+    otButce = q.o;
+    otG = q.gg;
+    otPq = 0;
+    otYangila(Sahna.camera.position.x, Sahna.camera.position.z);
   };
 
   // Daraxt va toshlardan itarib chiqarish (to‘qnashuv)
