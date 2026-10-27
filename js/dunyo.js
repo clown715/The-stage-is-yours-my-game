@@ -9,8 +9,8 @@ const Dunyo = {};
   const KOL = { x: 46, z: -34, r: 24 };   // ko‘l markazi va radiusi
   const SUV_Y = -1.0;
   const BOYI = 440;
-  const MAX_DARAXT = 240, MAX_GUL = 400, MAX_TOSH = 46, MAX_OT = 13500, MAX_ZARRA = 150;
-  const OT_R = 100, OT_G = 1.6;
+  const MAX_DARAXT = 240, MAX_GUL = 400, MAX_TOSH = 46, MAX_OT = 9000, MAX_ZARRA = 150;
+  const OT_R = 80, OT_G = 1.0;
 
   function mulberry(a) {
     return function () {
@@ -40,17 +40,29 @@ const Dunyo = {};
     const t = Math.max(0, Math.min(1, (x - a) / (b - a)));
     return t * t * (3 - 2 * t);
   }
+  // ko‘lning notekis (tabiiy) shakli uchun masofa
+  function kolMasofa(x, z) {
+    const dx = x - KOL.x, dz = z - KOL.z;
+    const th = Math.atan2(dz, dx);
+    return Math.hypot(dx, dz) * (1 + 0.12 * Math.sin(3 * th + 0.7) + 0.07 * Math.sin(5 * th + 2.0));
+  }
   function balandlik(x, z) {
     let h = (fbm(x * 0.012, z * 0.012) - 0.5) * 30;
     const d0 = Math.hypot(x, z);
     h = h * (0.15 + 0.85 * ss(6, 40, d0)) + 1.6 * (1 - ss(0, 50, d0));
-    const dl = Math.hypot(x - KOL.x, z - KOL.z);
+    const dl = kolMasofa(x, z);
     h = h + (1.5 - h) * ss(KOL.r * 1.9, KOL.r * 1.0, dl);
-    h = h + (-3.4 - h) * ss(KOL.r * 0.95, KOL.r * 0.45, dl);
+    h = h + (-3.4 - h) * ss(KOL.r * 0.8, KOL.r * 0.45, dl);
     return h;
   }
   Dunyo.balandlik = balandlik;
   Dunyo.kol = KOL;
+  Dunyo.suvY = SUV_Y;
+  // Ko‘l ichida suv chuqurligi (ko‘ldan tashqarida 0)
+  Dunyo.suvChuqurligi = function (x, z) {
+    if (kolMasofa(x, z) > KOL.r * 0.8) return 0;
+    return Math.max(0, SUV_Y - balandlik(x, z));
+  };
 
   /* ---------- yer rangi (balandlikka qarab) ---------- */
   const RAMPA = [
@@ -114,10 +126,14 @@ const Dunyo = {};
     grup.add(terra);
   }
 
-  /* ---------- ko‘l (animatsiyalangan suv) ---------- */
+  /* ---------- ko‘l (firuza suv: chuqurlikka qarab rang, ko‘pik, to‘lqin, yaltirash) ---------- */
   function suvYasa() {
     suvMat = new THREE.ShaderMaterial({
-      uniforms: THREE.UniformsUtils.merge([THREE.UniformsLib.fog, { uT: { value: 0 } }]),
+      uniforms: THREE.UniformsUtils.merge([THREE.UniformsLib.fog, {
+        uT: { value: 0 },
+        uC: { value: new THREE.Vector2(KOL.x, KOL.z) },
+        uR: { value: KOL.r }
+      }]),
       vertexShader: [
         'varying vec3 vP;',
         '#include <fog_pars_vertex>',
@@ -130,16 +146,28 @@ const Dunyo = {};
         '}'
       ].join('\n'),
       fragmentShader: [
-        'uniform float uT; varying vec3 vP;',
+        'uniform float uT; uniform vec2 uC; uniform float uR; varying vec3 vP;',
         '#include <fog_pars_fragment>',
+        'float ss(float a, float b, float x){ float t = clamp((x-a)/(b-a), 0.0, 1.0); return t*t*(3.0-2.0*t); }',
         'void main(){',
-        '  float w = sin(vP.x*0.6+uT*0.9) + sin(vP.z*0.8-uT*0.7) + sin((vP.x+vP.z)*0.4+uT*0.5);',
-        '  w = w/3.0*0.5 + 0.5;',
-        '  float b = floor(w*3.0)/3.0;',
-        '  vec3 c = mix(vec3(0.25,0.72,0.85), vec3(0.55,0.90,0.95), b);',
-        '  float sp = step(0.93, sin(vP.x*2.1+uT*1.3)*sin(vP.z*2.3-uT*1.1)*0.5+0.5);',
-        '  c += sp*0.35;',
-        '  gl_FragColor = vec4(c, 0.88);',
+        '  vec2 d = vP.xz - uC;',
+        '  float th = atan(d.y, d.x);',
+        '  float de = length(d) * (1.0 + 0.12*sin(3.0*th+0.7) + 0.07*sin(5.0*th+2.0));',
+        '  float h = 1.5 - 4.9 * ss(uR*0.8, uR*0.45, de);',
+        '  float depth = max(' + SUV_Y.toFixed(2) + ' - h, 0.0);',
+        '  float dk = smoothstep(0.0, 2.3, depth);',
+        '  vec3 c = mix(vec3(0.55,0.95,0.90), vec3(0.10,0.58,0.76), dk);',
+        '  float w = sin(vP.x*0.5+uT*0.8) + sin(vP.z*0.7-uT*0.6) + sin((vP.x+vP.z)*0.35+uT*0.45);',
+        '  c += (w/6.0) * 0.10;',
+        '  float sp = pow(max(sin(vP.x*1.7+uT*1.1)*sin(vP.z*1.9-uT*0.9), 0.0), 14.0);',
+        '  c += sp * 0.45;',
+        '  float wob = 0.05*sin(th*18.0+uT*1.6) + 0.04*sin(th*7.0-uT*1.1);',
+        '  float foam = 1.0 - smoothstep(0.10+wob, 0.26+wob, depth);',
+        '  foam *= 0.65 + 0.35*sin(th*45.0 + uT*0.9 + depth*25.0);',
+        '  foam = clamp(foam, 0.0, 1.0);',
+        '  c = mix(c, vec3(1.0), foam);',
+        '  float a = max(mix(0.5, 0.9, dk), foam);',
+        '  gl_FragColor = vec4(c, a);',
         '  #include <fog_fragment>',
         '}'
       ].join('\n'),
@@ -147,7 +175,7 @@ const Dunyo = {};
       depthWrite: false,
       fog: true
     });
-    const g = new THREE.CircleGeometry(KOL.r * 0.9, 48);
+    const g = new THREE.CircleGeometry(KOL.r * 0.95, 64);
     g.rotateX(-Math.PI / 2);
     suvMesh = new THREE.Mesh(g, suvMat);
     suvMesh.position.set(KOL.x, SUV_Y, KOL.z);
@@ -211,37 +239,42 @@ const Dunyo = {};
     grup.add(tanaMesh, bargMesh);
   }
 
-  /* ---------- o‘t (InstancedMesh + shamolda tebranadi) ---------- */
+  /* ---------- o‘t (InstancedMesh, shamolda tebranadi; har pichoq har xil) ---------- */
   function otYasa() {
-    const pos = [];
+    const pos = [], tas = [];
     const rr = mulberry(777);
-    for (let b = 0; b < 5; b++) {
-      const a = rr() * 6.283, ox = (rr() - 0.5) * 0.5, oz = (rr() - 0.5) * 0.5;
-      const w = 0.05 + rr() * 0.03, ht = 0.65 + rr() * 0.45, lean = (rr() - 0.5) * 0.35;
+    for (let b = 0; b < 7; b++) {
+      const a = rr() * 6.283, ox = (rr() - 0.5) * 0.6, oz = (rr() - 0.5) * 0.6;
+      const w = 0.03 + rr() * 0.045, ht = 0.2 + rr() * 0.35, lean = (rr() - 0.5) * 0.4, q = rr();
       const ca = Math.cos(a), sa = Math.sin(a);
       const P = function (lx, ly) { return [ox + lx * ca, ly, oz - lx * sa]; };
       const A = P(-w, 0), B = P(w, 0), C = P(lean, ht);
       pos.push(A[0], A[1], A[2], B[0], B[1], B[2], C[0], C[1], C[2]);
+      tas.push(q, q, q);
     }
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    g.setAttribute('aR', new THREE.Float32BufferAttribute(tas, 1));
 
     otMat = new THREE.ShaderMaterial({
       uniforms: THREE.UniformsUtils.merge([THREE.UniformsLib.fog, { uT: { value: 0 }, uP: { value: new THREE.Vector3() } }]),
       vertexShader: [
+        'attribute float aR;',
         'uniform float uT; uniform vec3 uP;',
-        'varying float vH; varying float vM;',
+        'varying float vH; varying float vM; varying float vR;',
         '#include <fog_pars_vertex>',
         'void main(){',
         '  vec3 p = position;',
-        '  vH = clamp(p.y / 1.1, 0.0, 1.0);',
+        '  vH = clamp(p.y / 0.55, 0.0, 1.0);',
+        '  vR = aR;',
         '  vec3 base = (instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xyz;',
         '  float d = length(base.xz - uP.xz);',
-        '  p.y *= 1.0 - smoothstep(60.0, 95.0, d);',
+        '  p.y *= 1.0 - smoothstep(40.0, 66.0, d);',
+        '  p.x += (aR - 0.5) * 0.3 * vH * vH;',
         '  vec4 ip = instanceMatrix * vec4(p, 1.0);',
         '  float w = sin(uT*1.8 + base.x*0.35 + base.z*0.27) + sin(uT*2.7 + base.x*0.9)*0.4;',
-        '  ip.x += w * 0.18 * vH * vH;',
-        '  ip.z += w * 0.10 * vH * vH;',
+        '  ip.x += w * 0.12 * vH * vH;',
+        '  ip.z += w * 0.07 * vH * vH;',
         '  vM = fract(sin(base.x*12.9898 + base.z*78.233) * 43758.5453);',
         '  vec4 mvPosition = modelViewMatrix * ip;',
         '  gl_Position = projectionMatrix * mvPosition;',
@@ -249,11 +282,14 @@ const Dunyo = {};
         '}'
       ].join('\n'),
       fragmentShader: [
-        'varying float vH; varying float vM;',
+        'varying float vH; varying float vM; varying float vR;',
         '#include <fog_pars_fragment>',
         'void main(){',
-        '  vec3 c = mix(vec3(0.20,0.58,0.30), vec3(0.62,0.90,0.42), vH);',
-        '  c = mix(c, c*vec3(1.1,1.05,0.85), vM*0.5);',
+        '  vec3 baseC = mix(vec3(0.14,0.48,0.30), vec3(0.20,0.58,0.34), vR);',
+        '  vec3 tip = mix(vec3(0.55,0.88,0.40), vec3(0.78,0.92,0.45), vM);',
+        '  vec3 c = mix(baseC, tip, vH);',
+        '  c = mix(c, vec3(0.30,0.72,0.62), step(0.9, vM) * 0.35);',
+        '  c *= 0.88 + 0.24 * vR;',
         '  gl_FragColor = vec4(c, 1.0);',
         '  #include <fog_fragment>',
         '}'
@@ -267,7 +303,8 @@ const Dunyo = {};
     grup.add(otMesh);
   }
 
-  // O‘tni o‘yinchi atrofida qayta joylashtirish (dunyo katakchalariga bog‘langan, shuning uchun sakramaydi)
+  // O‘tni o‘yinchi atrofida qayta joylashtirish (dunyo katakchalariga bog‘langan, shuning uchun sakramaydi).
+  // Gruppa-gruppa: shovqin bo‘yicha zich va siyrak joylar hosil bo‘ladi.
   function otYangila(cx, cz) {
     otMerkez = { x: cx, z: cz };
     const ci0 = Math.round(cx / OT_G), cj0 = Math.round(cz / OT_G);
@@ -276,16 +313,23 @@ const Dunyo = {};
     for (let i = -N; i <= N && k < MAX_OT; i++) {
       for (let j = -N; j <= N; j++) {
         const ci = ci0 + i, cj = cj0 + j;
-        if (hash(ci * 0.71 + 3.1, cj * 0.93 + 7.7) > otZichlik) continue;
+        const gx = ci * OT_G - cx, gz = cj * OT_G - cz;
+        if (gx * gx + gz * gz > (OT_R + OT_G) * (OT_R + OT_G)) continue;
         const x = (ci + hash(ci * 1.31, cj * 2.17)) * OT_G;
         const z = (cj + hash(ci * 3.77 + 1.2, cj * 0.57)) * OT_G;
         const dx = x - cx, dz = z - cz;
         if (dx * dx + dz * dz > OT_R * OT_R) continue;
+        const katta = ss(0.3, 0.62, vn(x * 0.045 + 20, z * 0.045 - 9));
+        const mayda = ss(0.25, 0.7, vn(x * 0.22 + 4, z * 0.22 + 13));
+        const zich = (0.08 + 0.92 * katta) * (0.45 + 0.55 * mayda);
+        if (hash(ci * 0.71 + 3.1, cj * 0.93 + 7.7) > otZichlik * zich) continue;
         if (Math.hypot(x - KOL.x, z - KOL.z) < KOL.r * 0.98) continue;
         const h = balandlik(x, z);
-        if (h < 0.0) continue;
-        const s = 0.8 + hash(ci * 5.3, cj * 1.9) * 0.8;
-        matritsa(otMesh, k++, x, h, z, hash(ci * 2.9, cj * 4.1) * 6.283, s, s * (0.8 + hash(ci * 9.1, cj * 0.3) * 0.7), s);
+        if (h < 0.2) continue;
+        const sx = 0.7 + hash(ci * 5.3, cj * 1.9) * 0.9;
+        let sy = 0.6 + hash(ci * 9.1, cj * 0.3) * 0.8;
+        if (hash(ci * 6.7 + 2, cj * 3.3) > 0.88) sy *= 1.7;   // ba’zilari balandroq
+        matritsa(otMesh, k++, x, h, z, hash(ci * 2.9, cj * 4.1) * 6.283, sx, sy, sx);
         if (k >= MAX_OT) break;
       }
     }
@@ -465,7 +509,7 @@ const Dunyo = {};
     otMat.uniforms.uP.value.copy(p);
     suvMat.uniforms.uT.value = t;
     const dx = p.x - otMerkez.x, dz = p.z - otMerkez.z;
-    if (dx * dx + dz * dz > 24 * 24) otYangila(p.x, p.z);
+    if (dx * dx + dz * dz > 14 * 14) otYangila(p.x, p.z);
     zarralarniYangila(dt, t, p);
   };
 

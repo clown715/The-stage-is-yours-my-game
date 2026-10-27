@@ -4,9 +4,9 @@
 const Kamera = {
   yaw: 0,
   pitch: 0.32,
-  mesafe: 7.5,
-  minMesafe: 3.5,
-  maxMesafe: 11,
+  mesafe: 5.8,
+  minMesafe: 2.7,
+  maxMesafe: 8.5,
   hedef: new THREE.Vector3(),
   tayyor: false,
 
@@ -32,7 +32,7 @@ const Kamera = {
     this.pitch = Math.max(0.08, Math.min(1.3, this.pitch));
     this.mesafe = Math.max(this.minMesafe, Math.min(this.maxMesafe, this.mesafe));
 
-    const tx = p.x, ty = p.y + 1.5, tz = p.z;
+    const tx = p.x, ty = p.y + 1.15, tz = p.z;
     if (!this.tayyor) {
       this.hedef.set(tx, ty, tz);
       this.tayyor = true;
@@ -50,7 +50,7 @@ const Kamera = {
       this.hedef.z + Math.cos(this.yaw) * cp * this.mesafe
     );
     // yerdan pastga tushmaydi
-    const yer = Dunyo.balandlik(cam.position.x, cam.position.z) + 0.6;
+    const yer = Math.max(Dunyo.balandlik(cam.position.x, cam.position.z), Dunyo.suvY) + 0.45;   // yerdan va suv yuzasidan pastga tushmaydi
     if (cam.position.y < yer) cam.position.y = yer;
 
     // yugurganda ko‘rish burchagi biroz kengayadi
