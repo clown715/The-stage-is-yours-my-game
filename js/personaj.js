@@ -24,12 +24,12 @@ const PersonajModeli = {
       const m = new THREE.Mesh(g, mat || Sahna.toon(renk));
       m.position.set(x || 0, y || 0, z || 0);
       m.castShadow = true;
-      if (q !== 0) Sahna.kontur(m, q || 0.012, INK);
+      if (q !== 0) Sahna.kontur(m, q || 0.007, INK);   // ingichka kontur
       ota.add(m);
       return m;
     }
     function sfera(r, sx, sy, sz) {
-      const g = new THREE.SphereGeometry(r, 20, 14);
+      const g = new THREE.SphereGeometry(r, 18, 12);
       g.scale(sx, sy, sz);
       return g;
     }
@@ -59,22 +59,47 @@ const PersonajModeli = {
     const birlik = new THREE.SphereGeometry(1, 12, 9);   // birlik shar (ellipsoidlar uchun)
     const vcMat = function () { return Sahna.toon(0xffffff, { vertexColors: true }); };
 
+    /* ----- qo‘shimcha yordamchilar ----- */
+    function sph(r) { return new THREE.SphereGeometry(r, 14, 10); }
+    // MT: tutam uchun — az: aylana bo‘ylab yo‘nalish, tilt: tashqariga og‘ish (musbat = tashqariga)
+    function MT(x, y, z, sx, sy, sz, tilt, az) {
+      const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(-tilt, az, 0, 'YXZ'));
+      return new THREE.Matrix4().compose(new THREE.Vector3(x, y, z), q, new THREE.Vector3(sx, sy, sz));
+    }
+    // burmali, yumshoq yubka qatlami (hoshiya to‘lqinsimon)
+    function yubkaYasa(rUst, rPast, bal, burma, f0) {
+      const g = new THREE.CylinderGeometry(rUst, rPast, bal, 36, 4, false);
+      const p = g.attributes.position;
+      for (let i = 0; i < p.count; i++) {
+        const x = p.getX(i), y = p.getY(i), z = p.getZ(i);
+        const f = 0.5 - y / bal;                       // 0 — tepada, 1 — pastda
+        const a = Math.atan2(z, x);
+        const k = 1 + 0.10 * f * Math.sin(a * burma + f0);
+        p.setX(i, x * k);
+        p.setZ(i, z * k);
+        p.setY(i, y - 0.035 * f * f * (0.5 + 0.5 * Math.sin(a * burma + f0 + 1.57)));
+      }
+      g.computeVertexNormals();
+      return g;
+    }
+
     /* ----- tana ----- */
-    qism(silindr(0.17, 0.25, 0.3, 24), FIROZA, kalcha, 0, 1.0, 0);                    // pastki ko‘ylak
-    const etak = new THREE.TorusGeometry(0.25, 0.012, 6, 32);
-    etak.rotateX(Math.PI / 2);
-    qism(etak, OLTIN, kalcha, 0, 0.85, 0, 0);                                         // ko‘ylak hoshiyasi
-    qism(silindr(0.185, 0.15, 0.46, 24), OQ, ust, 0, 1.27, 0);                        // ko‘krak
-    qism(silindr(0.165, 0.165, 0.06, 24), OLTIN, ust, 0, 1.08, 0);                    // belbog‘
-    qism(silindr(0.042, 0.05, 0.16, 12), TERI, ust, 0, 1.53, 0, 0.007);               // bo‘yin
-    qism(silindr(0.19, 0.3, 0.14, 28), FIROZA, ust, 0, 1.4, 0);                       // yelkadagi mato (mantiya)
-    const halqa = new THREE.TorusGeometry(0.3, 0.012, 6, 32);
-    halqa.rotateX(Math.PI / 2);
-    qism(halqa, OLTIN, ust, 0, 1.33, 0, 0);                                           // mantiya hoshiyasi
+    const yubka1 = qism(yubkaYasa(0.165, 0.255, 0.3, 11, 0), 0x28a898, kalcha, 0, 1.0, 0, 0.006);    // pastki qatlam
+    const yubka2 = qism(yubkaYasa(0.17, 0.245, 0.22, 11, 0.55), FIROZA, kalcha, 0, 1.04, 0, 0.006);  // ustki qatlam
+    qism(silindr(0.185, 0.15, 0.46, 24), OQ, ust, 0, 1.27, 0);                         // ko‘krak
+    qism(silindr(0.168, 0.168, 0.05, 24), OLTIN, ust, 0, 1.165, 0, 0.004);             // bitta ingichka belbog‘ (tanaga yopishgan)
+    qism(silindr(0.042, 0.05, 0.16, 12), TERI, ust, 0, 1.54, 0, 0.005);                // bo‘yin
+
+    // yelkalik: yelkaga yopishgan, yumaloq (profil pastdan yuqoriga)
+    const yelkalikG = new THREE.LatheGeometry([[0.30, -0.14], [0.285, -0.085], [0.24, -0.02], [0.18, 0.015], [0.11, 0.032], [0.05, 0.035]]
+      .map(function (q) { return new THREE.Vector2(q[0], q[1]); }), 28);
+    yelkalikG.scale(1, 1, 0.72);
+    qism(yelkalikG, FIROZA, ust, 0, 1.45, 0, 0.006);
+    qism(sph(0.02), OLTIN, ust, 0, 1.39, 0.205, 0);                                    // yelkalik tugmasi
 
     /* ----- bosh va yuz ----- */
     const bosh = new THREE.Group();
-    bosh.position.set(0, 1.73, 0);
+    bosh.position.set(0, 1.755, 0);
     ust.add(bosh);
     qism(sfera(0.17, 1, 0.98, 0.96), TERI, bosh, 0, 0, 0);
 
@@ -90,46 +115,41 @@ const PersonajModeli = {
     E(0, -0.075, 0.147, 0.016, 0.005, 0.004, 0xc0615f);                 // og‘iz
     qism(birla(yuz), 0xffffff, bosh, 0, 0, 0, 0, vcMat());
 
-    // soch: qalpoq + orqa qism
-    const qalpoq = qism(new THREE.SphereGeometry(0.19, 24, 14, 0, Math.PI * 2, 0, Math.PI * 0.55), SOCH, bosh, 0, 0.012, -0.015, 0.008);
-    qalpoq.rotation.x = -0.55;
-    qism(sfera(0.175, 1, 1.15, 0.95), SOCH, bosh, 0, -0.06, -0.045, 0.008);
+    // soch: yupqa qalpoq (faqat tepa) + tutam-tutam qatorlar (dubulg‘a emas)
+    const qalpoq = qism(new THREE.SphereGeometry(0.182, 22, 12, 0, Math.PI * 2, 0, Math.PI * 0.5), SOCH, bosh, 0, 0.02, -0.012, 0.005);
+    qalpoq.rotation.x = -0.5;
 
-    // popuk tutamlari (aniq alohida tutamlar)
     const tutam = new THREE.ConeGeometry(0.038, 1, 5);
     tutam.rotateX(Math.PI);
     tutam.translate(0, -0.5, 0);
+
+    // popuk tutamlari
     const popuk = [];
     [[-1.1, 0.2], [-0.8, 0.13], [-0.45, 0.095], [-0.15, 0.075], [0.15, 0.075], [0.45, 0.095], [0.8, 0.13], [1.1, 0.2]].forEach(function (b, i) {
       const a = b[0], L = b[1];
-      const y = 0.09 - 0.045 * (Math.abs(a) / 1.1) * (Math.abs(a) / 1.1);
-      popuk.push({
-        g: tutam,
-        m: M(Math.sin(a) * 0.17, y, Math.cos(a) * 0.17, 1, L, 1, 0.1 + 0.15 * Math.abs(a), 0, 0.22 * Math.sin(a)),
-        c: i % 2 ? SOCH2 : SOCH
-      });
+      const y = 0.115 - 0.05 * (Math.abs(a) / 1.1) * (Math.abs(a) / 1.1);
+      popuk.push({ g: tutam, m: MT(Math.sin(a) * 0.168, y, Math.cos(a) * 0.168, 1, L, 1, -0.15, a), c: i % 2 ? SOCH2 : SOCH });
     });
-    qism(birla(popuk), 0xffffff, bosh, 0, 0, 0, 0.006, vcMat());
+    qism(birla(popuk), 0xffffff, bosh, 0, 0, 0, 0.005, vcMat());
 
-    // orqa va yon tutamlar
+    // orqa tutamlar: 3 qator, bir-birining ustiga tushadi
     const orqa = [];
-    for (let i = 0; i < 8; i++) {
-      const a = 2.2 + i * 0.27;
-      const L = 0.2 + 0.1 * ((i * 37) % 5) / 4;
-      orqa.push({
-        g: tutam,
-        m: M(Math.sin(a) * 0.16, -0.03 - 0.02 * (i % 3), Math.cos(a) * 0.16, 1.25, L, 1.25, 0.1, 0, 0.2 * Math.sin(a)),
-        c: i % 3 === 1 ? SOCH2 : SOCH
-      });
-    }
-    qism(birla(orqa), 0xffffff, bosh, 0, 0, 0, 0.006, vcMat());
+    [[-0.03, 0.178, 9, 0.2, 0.27, 0.12], [-0.09, 0.16, 8, 0.22, 0.29, 0.0], [-0.14, 0.135, 6, 0.15, 0.21, -0.1]].forEach(function (qator, r) {
+      const n = qator[2];
+      for (let i = 0; i < n; i++) {
+        const a = 1.75 + (i + 0.5 * (r % 2)) * (2.65 / n);
+        const L = qator[3] + (qator[4] - qator[3]) * (((i * 37 + r * 11) % 5) / 4);
+        orqa.push({ g: tutam, m: MT(Math.sin(a) * qator[1], qator[0], Math.cos(a) * qator[1], 1.15, L, 1.15, qator[5], a), c: (i + r) % 3 === 1 ? SOCH2 : SOCH });
+      }
+    });
+    qism(birla(orqa), 0xffffff, bosh, 0, 0, 0, 0.005, vcMat());
 
-    const ahoge = qism(new THREE.ConeGeometry(0.018, 0.14, 5), SOCH2, bosh, 0.015, 0.215, 0.04, 0.006);
+    const ahoge = qism(new THREE.ConeGeometry(0.018, 0.14, 5), SOCH2, bosh, 0.02, 0.195, 0.03, 0.004);
     ahoge.rotation.z = -0.4;
-    qism(new THREE.OctahedronGeometry(0.025), OLTIN, bosh, 0.125, 0.12, 0.11, 0.005);   // soch to‘g‘nog‘ichi
+    qism(new THREE.OctahedronGeometry(0.025), OLTIN, bosh, 0.125, 0.13, 0.105, 0.004);   // soch to‘g‘nog‘ichi
 
     // kokil (dumcha): 3 bo‘g‘in, har biri bir necha tutamdan, tebranadi
-    function bogin(uz, r, rangi) {
+    function bogin(uz, r) {
       return Sahna.birlashtir([
         { g: birlik, m: M(0, -uz / 2, 0, r, uz / 2, r) },
         { g: birlik, m: M(-r * 0.7, -uz * 0.45, 0, r * 0.7, uz * 0.45, r * 0.8) },
@@ -137,14 +157,14 @@ const PersonajModeli = {
       ]);
     }
     const poni1 = new THREE.Group();
-    poni1.position.set(0, 0.1, -0.17);
+    poni1.position.set(0, 0.12, -0.165);
     bosh.add(poni1);
-    qism(sfera(0.04, 1, 1, 1), OLTIN, poni1, 0, 0, 0, 0.005);
-    qism(bogin(0.24, 0.055), SOCH, poni1, 0, -0.02, 0, 0.008);
+    qism(sph(0.04), OLTIN, poni1, 0, 0, 0, 0.004);
+    qism(bogin(0.24, 0.055), SOCH, poni1, 0, -0.02, 0, 0.006);
     const poni2 = new THREE.Group();
     poni2.position.set(0, -0.24, 0);
     poni1.add(poni2);
-    qism(bogin(0.24, 0.05), SOCH, poni2, 0, 0, 0, 0.008);
+    qism(bogin(0.24, 0.05), SOCH, poni2, 0, 0, 0, 0.006);
     const poni3 = new THREE.Group();
     poni3.position.set(0, -0.24, 0);
     poni2.add(poni3);
@@ -152,79 +172,96 @@ const PersonajModeli = {
       { g: tutam, m: M(-0.035, 0, 0, 1.2, 0.26, 1.2, 0, 0, 0.12) },
       { g: tutam, m: M(0, 0, 0, 1.4, 0.32, 1.4) },
       { g: tutam, m: M(0.035, 0, 0, 1.2, 0.24, 1.2, 0, 0, -0.12) }
-    ]), SOCH2, poni3, 0, 0, 0, 0.008);
+    ]), SOCH2, poni3, 0, 0, 0, 0.006);
 
-    /* ----- qo‘llar (barmoqlar bilan) ----- */
-    const barmoq = new THREE.CylinderGeometry(0.0085, 0.0072, 0.058, 6);
-    barmoq.translate(0, -0.029, 0);
+    /* ----- qo‘llar: yelka, tirsak, bilak bo‘g‘imlari sfera bilan yumaloqlangan ----- */
+    const barmoq = new THREE.CylinderGeometry(0.0075, 0.0065, 0.045, 6);
+    barmoq.translate(0, -0.0225, 0);
     function elGeo(yon) {
-      const L = [{ g: birlik, m: M(0, -0.02, 0, 0.036, 0.045, 0.022) }];
-      [-0.024, -0.008, 0.008, 0.024].forEach(function (x, i) {
-        L.push({ g: barmoq, m: M(x, -0.052, 0.004, 1, (i === 1 || i === 2) ? 1.1 : 1, 1, -0.25) });
+      const L = [{ g: sph(0.03), m: M(0, -0.022, 0, 1, 1.2, 0.68) }];                   // kichik yumaloq kaft
+      [-0.019, -0.0063, 0.0063, 0.019].forEach(function (x, i) {
+        L.push({ g: barmoq, m: M(x, -0.05, 0.004, 1, (i === 1 || i === 2) ? 1.1 : 1, 1, -0.3) });
       });
-      L.push({ g: barmoq, m: M(-yon * 0.034, -0.03, 0.014, 1.1, 0.75, 1.1, -0.2, 0, -yon * 0.7) });   // bosh barmoq
+      L.push({ g: barmoq, m: M(-yon * 0.028, -0.03, 0.012, 1.1, 0.75, 1.1, -0.2, 0, -yon * 0.7) });   // bosh barmoq
       return Sahna.birlashtir(L);
     }
     function qolYasa(yon) {
       const yelka = new THREE.Group();
-      yelka.position.set(yon * 0.27, 1.4, 0);
+      yelka.position.set(yon * 0.27, 1.34, 0);
       ust.add(yelka);
-      qism(silindr(0.052, 0.046, 0.3, 14), OQ, yelka, 0, -0.15, 0);
+      qism(Sahna.birlashtir([
+        { g: silindr(0.045, 0.039, 0.3, 14), m: M(0, -0.15, 0, 1, 1, 1) },
+        { g: sph(0.05), m: M(0, 0, 0, 1, 1, 1) },               // yelka bo‘g‘imi
+        { g: sph(0.042), m: M(0, -0.3, 0, 1, 1, 1) }             // tirsak bo‘g‘imi
+      ]), OQ, yelka, 0, 0, 0);
       const tirsak = new THREE.Group();
       tirsak.position.set(0, -0.3, 0);
       yelka.add(tirsak);
-      qism(silindr(0.042, 0.036, 0.27, 14), TERI, tirsak, 0, -0.135, 0);
-      const bilak = new THREE.TorusGeometry(0.042, 0.011, 6, 16);
-      bilak.rotateX(Math.PI / 2);
-      qism(bilak, OLTIN, tirsak, 0, -0.245, 0, 0);
+      qism(Sahna.birlashtir([
+        { g: silindr(0.037, 0.029, 0.26, 14), m: M(0, -0.13, 0, 1, 1, 1) },
+        { g: sph(0.032), m: M(0, -0.26, 0, 1, 1, 1) }            // bilak bo‘g‘imi
+      ]), TERI, tirsak, 0, 0, 0);
+      qism(silindr(0.0335, 0.0335, 0.022, 14), OLTIN, tirsak, 0, -0.235, 0, 0);   // bilakka yopishgan tilla tasma
       const el = new THREE.Group();
-      el.position.set(0, -0.28, 0);
+      el.position.set(0, -0.265, 0);
       tirsak.add(el);
-      qism(elGeo(yon), TERI, el, 0, 0, 0, 0.005);
+      qism(elGeo(yon), TERI, el, 0, 0, 0, 0.004);
       return { yelka: yelka, tirsak: tirsak, el: el };
     }
     const qolL = qolYasa(-1), qolR = qolYasa(1);
 
-    /* ----- oyoqlar (uzunroq va qalinroq) ----- */
+    /* ----- oyoqlar: son va boldir, ko‘rinadigan tizza, chiroyli etik ----- */
+    const tovon = 0x1f2a63;   // etik tagligi (ETIK ning to‘qroq tusi)
     function oyoqYasa(yon) {
       const son = new THREE.Group();
       son.position.set(yon * 0.1, 0.92, 0);
       kalcha.add(son);
       qism(Sahna.birlashtir([
-        { g: silindr(0.085, 0.066, 0.46, 16), m: M(0, -0.23, 0, 1, 1, 1) },
-        { g: new THREE.SphereGeometry(0.066, 14, 10), m: M(0, -0.46, 0, 1, 1, 1) }
+        { g: silindr(0.085, 0.064, 0.46, 16), m: M(0, -0.23, 0, 1, 1, 1) },
+        { g: sph(0.085), m: M(0, 0, 0, 1, 1, 1) },               // son bo‘g‘imi
+        { g: sph(0.066), m: M(0, -0.46, 0, 1, 1, 1) }            // tizza
       ]), TERI, son, 0, 0, 0);
       const tizza = new THREE.Group();
       tizza.position.set(0, -0.46, 0);
       son.add(tizza);
-      qism(silindr(0.064, 0.05, 0.34, 16), OQ, tizza, 0, -0.17, 0);
-      qism(silindr(0.062, 0.072, 0.14, 16), ETIK, tizza, 0, -0.27, 0);
+      qism(silindr(0.058, 0.044, 0.34, 16), OQ, tizza, 0, -0.17, 0);        // boldir (paypoq)
+      qism(silindr(0.052, 0.058, 0.15, 16), ETIK, tizza, 0, -0.28, 0);      // etik boncha
+      qism(silindr(0.055, 0.055, 0.02, 16), OLTIN, tizza, 0, -0.215, 0, 0); // etik tepasidagi tilla tasma
       const topiq = new THREE.Group();
-      topiq.position.set(0, -0.4, 0);
+      topiq.position.set(0, -0.39, 0);
       tizza.add(topiq);
-      qism(sfera(0.075, 1, 0.6, 1.7), ETIK, topiq, 0, -0.015, 0.05);
+      qism(birla([
+        { g: birlik, m: M(0, -0.015, 0.04, 0.062, 0.05, 0.11), c: ETIK },     // oyoq usti
+        { g: birlik, m: M(0, -0.03, 0.115, 0.058, 0.04, 0.065), c: ETIK },    // barmoq qismi
+        { g: birlik, m: M(0, -0.052, 0.05, 0.066, 0.016, 0.14), c: tovon }    // taglik
+      ]), 0xffffff, topiq, 0, 0, 0, 0.005, vcMat());
       return { son: son, tizza: tizza, topiq: topiq };
     }
     const oyL = oyoqYasa(-1), oyR = oyoqYasa(1);
 
-    /* ----- yelkadagi hajmli mato (plash): shamolda va yurganda tebranadi ----- */
-    const NU = 10, NV = 14, CL = 0.78;
+    /* ----- orqadagi plash: 3 bo‘lakli, yupqa, yumshoq yoyiladi ----- */
+    const STR = [{ c: -0.75, L: 0.66, r: 0.0 }, { c: 0, L: 0.82, r: 0.014 }, { c: 0.75, L: 0.66, r: 0.0 }];
+    const NU = 4, NV = 12, PH = 0.42;
+    const per = (NU + 1) * (NV + 1);
     const plashG = new THREE.BufferGeometry();
-    const pPos = new Float32Array((NU + 1) * (NV + 1) * 3);
-    const pCol = new Float32Array((NU + 1) * (NV + 1) * 3);
+    const pPos = new Float32Array(per * 9);
+    const pCol = new Float32Array(per * 9);
     const idx = [];
     const cF = new THREE.Color(FIROZA), cO = new THREE.Color(OLTIN);
-    for (let v = 0; v <= NV; v++) {
-      const rang = v === NV ? cO : cF;
-      for (let u = 0; u <= NU; u++) {
-        const n = (v * (NU + 1) + u) * 3;
-        pCol[n] = rang.r; pCol[n + 1] = rang.g; pCol[n + 2] = rang.b;
+    for (let sI = 0; sI < 3; sI++) {
+      const off = sI * per;
+      for (let v = 0; v <= NV; v++) {
+        const rang = v === NV ? cO : cF;
+        for (let u = 0; u <= NU; u++) {
+          const n = (off + v * (NU + 1) + u) * 3;
+          pCol[n] = rang.r; pCol[n + 1] = rang.g; pCol[n + 2] = rang.b;
+        }
       }
-    }
-    for (let v = 0; v < NV; v++) {
-      for (let u = 0; u < NU; u++) {
-        const a = v * (NU + 1) + u, b = a + 1, c = a + NU + 1, d = c + 1;
-        idx.push(a, c, b, b, c, d);
+      for (let v = 0; v < NV; v++) {
+        for (let u = 0; u < NU; u++) {
+          const a = off + v * (NU + 1) + u, b = a + 1, c = a + NU + 1, d = c + 1;
+          idx.push(a, c, b, b, c, d);
+        }
       }
     }
     plashG.setIndex(idx);
@@ -238,17 +275,22 @@ const PersonajModeli = {
 
     function plashYangila(t, tez, k) {
       let n = 0;
-      for (let v = 0; v <= NV; v++) {
-        const d = v / NV;
-        const R = 0.31 + 0.12 * d;
-        for (let u = 0; u <= NU; u++) {
-          const phi = (u / NU * 2 - 1) * 1.3;
-          const r = R + Math.sin(phi * 4.5 + t * 2.6 - d * 3.5) * 0.025 * d * (0.5 + k);       // burmalar (hajm)
-          const orqaga = (0.04 + 0.36 * tez) * d * d + 0.02 * Math.sin(t * 1.7 + d * 2) * d;    // orqaga cho‘zilish
-          const pat = Math.sin(t * 5.5 - d * 5.0 + phi * 2.0) * (0.02 + 0.04 * tez) * d;       // pirpirash
-          pPos[n++] = Math.sin(phi) * r + Math.sin(t * 3.3 - d * 4) * 0.03 * d * k;
-          pPos[n++] = -d * CL * (1 - 0.12 * tez * d);
-          pPos[n++] = -Math.cos(phi) * r - orqaga + pat;
+      for (let sI = 0; sI < 3; sI++) {
+        const S = STR[sI];
+        for (let v = 0; v <= NV; v++) {
+          const d = v / NV;
+          for (let u = 0; u <= NU; u++) {
+            const f = u / NU * 2 - 1;
+            const phi = S.c + f * PH;
+            const uz = S.L * (1 - 0.14 * Math.abs(f));                                       // hoshiya uchli
+            const Rx = 0.31 + 0.12 * d + S.r, Rz = 0.205 + 0.14 * d + S.r;
+            const burma = Math.sin(phi * 4.5 + t * 2.6 - d * 3.5 + sI * 1.3) * 0.02 * d * (0.5 + k);
+            const orqaga = (0.03 + 0.34 * tez) * d * d + 0.02 * Math.sin(t * 1.7 + d * 2 + sI) * d;
+            const pat = Math.sin(t * 5.5 - d * 5.0 + phi * 2.0 + sI * 0.9) * (0.02 + 0.04 * tez) * d;
+            pPos[n++] = Math.sin(phi) * (Rx + burma) + Math.sin(t * 3.3 - d * 4 + sI) * 0.03 * d * k;
+            pPos[n++] = -d * uz * (1 - 0.12 * tez * d);
+            pPos[n++] = -Math.cos(phi) * (Rz + burma) - orqaga + pat;
+          }
         }
       }
       plashG.attributes.position.needsUpdate = true;
@@ -302,6 +344,12 @@ const PersonajModeli = {
         kalcha.rotation.z = s * 0.035 * k * wk;
         ust.rotation.z = -s * 0.02 * k * wk;
         ust.scale.y = 1 + Math.sin(t * 2.2) * 0.006 * (1 - k) * wk;
+
+        // yubka yurganda yengil tebranadi
+        yubka1.rotation.z = -s * 0.06 * k * wk;
+        yubka1.rotation.x = -(0.04 + 0.1 * yug) * k * wk;
+        yubka2.rotation.z = -s * 0.04 * k * wk + Math.sin(t * 1.3) * 0.01;
+        yubka2.rotation.x = -(0.02 + 0.08 * yug) * k * wk;
 
         bosh.rotation.x = -0.04 * k * wk - 0.75 * sw + Math.sin(t * 1.3) * 0.01;
         bosh.rotation.y = s * 0.07 * k * wk;
