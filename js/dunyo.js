@@ -8,6 +8,8 @@ const Dunyo = {};
 
   const KOL = { x: 46, z: -34, r: 24 };   // ko‘l markazi va radiusi
   const SUV_Y = -1.0;
+  const KOL_BANK = SUV_Y + 0.5;      // ko‘l qirg‘og‘i: suv sathidan 0.5 baland
+  const KOL_TUB = SUV_Y - 1.2;       // ko‘l tubi: suv sathidan 1.2 past
   const BOYI = 440, TER_SEG = 170;   // relyef o‘lchami va to‘r katakchalari soni
   const MAX_DARAXT = 240, MAX_GUL = 400, MAX_TOSH = 46, MAX_OT = 40000, MAX_ZARRA = 150;
   const OT_R = 48;   // o‘t kamera atrofida shu radiusda quriladi, 40 m dan uzoqdagisi ko‘rinmaydi
@@ -51,10 +53,10 @@ const Dunyo = {};
     const d0 = Math.hypot(x, z);
     h = h * (0.15 + 0.85 * ss(6, 40, d0)) + 1.6 * (1 - ss(0, 50, d0));
     const dl = kolMasofa(x, z);
-    h = h + (1.5 - h) * ss(KOL.r * 1.9, KOL.r * 1.0, dl);
-    h = h + (-3.4 - h) * ss(KOL.r * 0.8, KOL.r * 0.45, dl);
-    // ko‘l atrofidagi yer suv sathidan kamida 0.7 balandroq bo‘lsin (suv haqiqiy chuqurlikda yotadi)
-    const pastki = SUV_Y + 0.7 - 60 * (1 - ss(KOL.r * 0.9, KOL.r * 1.0, dl)) - 60 * ss(KOL.r * 2.2, KOL.r * 3.0, dl);
+    h = h + (KOL_BANK - h) * ss(KOL.r * 1.9, KOL.r * 1.0, dl);
+    h = h + (KOL_TUB - h) * ss(KOL.r * 0.8, KOL.r * 0.45, dl);
+    // ko‘l atrofidagi yer qirg‘oq balandligidan pastga tushmasin (qirg‘oqda o‘ra yoki zinapoya bo‘lmasin)
+    const pastki = KOL_BANK - 60 * (1 - ss(KOL.r * 0.9, KOL.r * 1.0, dl)) - 60 * ss(KOL.r * 2.2, KOL.r * 3.0, dl);
     if (h < pastki) h = pastki;
     return h;
   }
@@ -170,7 +172,7 @@ const Dunyo = {};
         '  vec2 d = p - uC;',
         '  float th = atan(d.y, d.x);',
         '  float de = length(d) * (1.0 + 0.12*sin(3.0*th+0.7) + 0.07*sin(5.0*th+2.0));',
-        '  return 1.5 - 4.9 * ss(uR*0.8, uR*0.45, de);',
+        '  return ' + KOL_BANK.toFixed(3) + ' - ' + (KOL_BANK - KOL_TUB).toFixed(3) + ' * ss(uR*0.8, uR*0.45, de);',   // relyef bilan bir xil formula
         '}',
         // relyef to‘ri bo‘yicha interpolyatsiya
         'float yerH(vec2 p){',
