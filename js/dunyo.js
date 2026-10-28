@@ -8,6 +8,7 @@ const Dunyo = {};
 
   const KOL = { x: 46, z: -34, r: 24 };   // ko‘l markazi va radiusi
   const SUV_Y = -1.0;
+  const KOL_BANK = SUV_Y + 0.7;      // ko‘l qirg‘og‘i balandligi: suv sathidan 0.7 baland (chuqur chuqurlik emas, suv ko‘rinib turadi)
   const BOYI = 440, TER_SEG = 170;   // relyef o‘lchami va to‘r katakchalari soni
   const MAX_DARAXT = 240, MAX_GUL = 400, MAX_TOSH = 46, MAX_OT = 40000, MAX_ZARRA = 150;
   const OT_R = 48;   // o‘t kamera atrofida shu radiusda quriladi, 40 m dan uzoqdagisi ko‘rinmaydi
@@ -51,10 +52,10 @@ const Dunyo = {};
     const d0 = Math.hypot(x, z);
     h = h * (0.15 + 0.85 * ss(6, 40, d0)) + 1.6 * (1 - ss(0, 50, d0));
     const dl = kolMasofa(x, z);
-    h = h + (1.5 - h) * ss(KOL.r * 1.9, KOL.r * 1.0, dl);
+    h = h + (KOL_BANK - h) * ss(KOL.r * 1.9, KOL.r * 1.0, dl);
     h = h + (-3.4 - h) * ss(KOL.r * 0.8, KOL.r * 0.45, dl);
     // ko‘l atrofidagi yer suv sathidan kamida 0.7 balandroq bo‘lsin (suv haqiqiy chuqurlikda yotadi)
-    const pastki = SUV_Y + 0.7 - 60 * (1 - ss(KOL.r * 0.9, KOL.r * 1.0, dl)) - 60 * ss(KOL.r * 2.2, KOL.r * 3.0, dl);
+    const pastki = KOL_BANK - 60 * (1 - ss(KOL.r * 0.9, KOL.r * 1.0, dl)) - 60 * ss(KOL.r * 2.2, KOL.r * 3.0, dl);
     if (h < pastki) h = pastki;
     return h;
   }
@@ -140,8 +141,6 @@ const Dunyo = {};
     geo.computeVertexNormals();
     terra = new THREE.Mesh(geo, Sahna.toon(0xffffff, { vertexColors: true }));
     terra.receiveShadow = true;
-    // diagnostika: ?relyeftest — relyef yorug‘liksiz, sof vertex ranglari bilan
-    if (typeof window !== 'undefined' && window.location && /[?&]relyeftest/.test(window.location.search)) terra.material = new THREE.MeshBasicMaterial({ vertexColors: true });
     grup.add(terra);
   }
 
@@ -150,10 +149,8 @@ const Dunyo = {};
      1) asosiy qatlam — MeshBasicMaterial (yorug‘lik, tuman va ton xaritalashga bog‘liq emas); chuqurlikka qarab
         rang vertexlarda oldindan hisoblanadi: sayozi #6fe0ea, chuquri #1f86c9, noshaffofligi 0.85.
         Chuqurlik = suv sathi − relyef balandligi (har bir nuqtada, relyef to‘rining o‘zi bo‘yicha).
-     2) ustki qatlam (shader) — faqat oq ko‘pik chizig‘i, yumshoq to‘lqin va yaltirash; u ishlamasa ham suv ko‘k qoladi.
-     Diagnostika: sahifa manziliga ?suvtest qo‘shilsa, suv oddiy yorqin ko‘k (0x1f86c9) to‘liq noshaffof bo‘ladi. */
+     2) ustki qatlam (shader) — faqat oq ko‘pik chizig‘i, yumshoq to‘lqin va yaltirash; u ishlamasa ham suv ko‘k qoladi. */
   function suvYasa() {
-    const sinov = typeof window !== 'undefined' && window.location && /[?&]suvtest/.test(window.location.search);
     const RS = 48, SS = 96, RAD = KOL.r * 0.95;
 
     // 1) asosiy qatlam
@@ -186,14 +183,11 @@ const Dunyo = {};
     g1.setAttribute('position', new THREE.BufferAttribute(pos, 3));
     g1.setAttribute('color', new THREE.BufferAttribute(col, 3));
     g1.setIndex(idx);
-    const mat1 = sinov
-      ? new THREE.MeshBasicMaterial({ color: 0x1f86c9, fog: false, toneMapped: false, depthWrite: true, side: THREE.DoubleSide })
-      : new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.85, depthWrite: false, fog: false, toneMapped: false, side: THREE.DoubleSide });
+    const mat1 = new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.85, depthWrite: false, fog: false, toneMapped: false, side: THREE.DoubleSide });
     suvMesh = new THREE.Mesh(g1, mat1);
     suvMesh.position.set(KOL.x, SUV_Y, KOL.z);
     suvMesh.renderOrder = 2;          // relyefdan keyin chiziladi
     grup.add(suvMesh);
-    if (sinov) return;
 
     // 2) ustki qatlam: ko‘pik, to‘lqin, yaltirash
     suvMat = new THREE.ShaderMaterial({
@@ -217,7 +211,7 @@ const Dunyo = {};
         '  vec2 d = p - uC;',
         '  float th = atan(d.y, d.x);',
         '  float de = length(d) * (1.0 + 0.12*sin(3.0*th+0.7) + 0.07*sin(5.0*th+2.0));',
-        '  return 1.5 - 4.9 * ss(uR*0.8, uR*0.45, de);',
+        '  return ' + KOL_BANK.toFixed(3) + ' - ' + (KOL_BANK + 3.4).toFixed(3) + ' * ss(uR*0.8, uR*0.45, de);',
         '}',
         'float yerH(vec2 p){',
         '  float S = ' + (BOYI / TER_SEG).toFixed(6) + ';',

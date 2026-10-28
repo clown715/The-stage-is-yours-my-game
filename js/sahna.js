@@ -32,11 +32,9 @@ const Sahna = {
 
   // 4 pog‘onali multfilm (toon) gradient xaritasi
   gradientYasash() {
-    // RGBA formatda: har qanday three.js / qurilmada to‘g‘ri kulrang (qizil kanalli RedFormat ba’zan rangni buzadi)
-    const v = [70, 140, 205, 255];
-    const d = new Uint8Array(16);
-    for (let i = 0; i < 4; i++) { d[i * 4] = v[i]; d[i * 4 + 1] = v[i]; d[i * 4 + 2] = v[i]; d[i * 4 + 3] = 255; }
-    const t = new THREE.DataTexture(d, 4, 1, THREE.RGBAFormat);
+    const d = new Uint8Array([70, 140, 205, 255]);
+    const fmt = this.renderer.capabilities.isWebGL2 ? THREE.RedFormat : THREE.LuminanceFormat;
+    const t = new THREE.DataTexture(d, 4, 1, fmt);
     t.minFilter = THREE.NearestFilter;
     t.magFilter = THREE.NearestFilter;
     t.generateMipmaps = false;
