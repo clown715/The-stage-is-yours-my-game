@@ -8,7 +8,6 @@ const Dunyo = {};
 
   const KOL = { x: 46, z: -34, r: 24 };   // ko‘l markazi va radiusi
   const SUV_Y = -1.0;
-  const KOL_BANK = SUV_Y + 0.7;      // ko‘l qirg‘og‘i balandligi: suv sathidan 0.7 baland (chuqur chuqurlik emas, suv ko‘rinib turadi)
   const BOYI = 440, TER_SEG = 170;   // relyef o‘lchami va to‘r katakchalari soni
   const MAX_DARAXT = 240, MAX_GUL = 400, MAX_TOSH = 46, MAX_OT = 40000, MAX_ZARRA = 150;
   const OT_R = 48;   // o‘t kamera atrofida shu radiusda quriladi, 40 m dan uzoqdagisi ko‘rinmaydi
@@ -52,10 +51,10 @@ const Dunyo = {};
     const d0 = Math.hypot(x, z);
     h = h * (0.15 + 0.85 * ss(6, 40, d0)) + 1.6 * (1 - ss(0, 50, d0));
     const dl = kolMasofa(x, z);
-    h = h + (KOL_BANK - h) * ss(KOL.r * 1.9, KOL.r * 1.0, dl);
+    h = h + (1.5 - h) * ss(KOL.r * 1.9, KOL.r * 1.0, dl);
     h = h + (-3.4 - h) * ss(KOL.r * 0.8, KOL.r * 0.45, dl);
     // ko‘l atrofidagi yer suv sathidan kamida 0.7 balandroq bo‘lsin (suv haqiqiy chuqurlikda yotadi)
-    const pastki = KOL_BANK - 60 * (1 - ss(KOL.r * 0.9, KOL.r * 1.0, dl)) - 60 * ss(KOL.r * 2.2, KOL.r * 3.0, dl);
+    const pastki = SUV_Y + 0.7 - 60 * (1 - ss(KOL.r * 0.9, KOL.r * 1.0, dl)) - 60 * ss(KOL.r * 2.2, KOL.r * 3.0, dl);
     if (h < pastki) h = pastki;
     return h;
   }
@@ -84,7 +83,7 @@ const Dunyo = {};
 
   /* ---------- yer rangi (balandlikka qarab) ---------- */
   const RAMPA = [
-    [-4, 0x6d5a40], [-1.2, 0x9a8359], [-0.3, 0xb39a6a], [0.4, 0xa9c27c], [1.5, 0x7bd47f],
+    [-4, 0x3a8fa3], [-0.8, 0x4fb0b8], [-0.3, 0xeadfa8], [0.5, 0xbfe08e], [1.5, 0x7bd47f],
     [4, 0x55b96f], [7, 0x8fd27f], [10, 0xcdeaa5], [14, 0xf0f6d6]
   ].map(function (s) { return [s[0], new THREE.Color(s[1])]; });
   const _r = new THREE.Color();
@@ -144,52 +143,11 @@ const Dunyo = {};
     grup.add(terra);
   }
 
-  /* ---------- ko‘l: ravshan ko‘k suv ----------
-     Ikki qatlam:
-     1) asosiy qatlam — MeshBasicMaterial (yorug‘lik, tuman va ton xaritalashga bog‘liq emas); chuqurlikka qarab
-        rang vertexlarda oldindan hisoblanadi: sayozi #6fe0ea, chuquri #1f86c9, noshaffofligi 0.85.
-        Chuqurlik = suv sathi − relyef balandligi (har bir nuqtada, relyef to‘rining o‘zi bo‘yicha).
-     2) ustki qatlam (shader) — faqat oq ko‘pik chizig‘i, yumshoq to‘lqin va yaltirash; u ishlamasa ham suv ko‘k qoladi. */
+  /* ---------- ko‘l: ravshan ko‘k suv (tuman va yorug‘lik ta’sir qilmaydi, o‘z rangini o‘zi hisoblaydi) ----------
+     Chuqurlik = suv sathi − relyef balandligi. Relyef balandligi relyef to‘rining o‘zidagidek
+     (to‘rtburchak katakchalarda uchburchak interpolyatsiya) hisoblanadi, shuning uchun qirg‘oq va ko‘pik
+     aynan suv chegarasiga to‘g‘ri tushadi. */
   function suvYasa() {
-    const RS = 48, SS = 96, RAD = KOL.r * 0.95;
-
-    // 1) asosiy qatlam
-    const n = 1 + RS * SS;
-    const pos = new Float32Array(n * 3), col = new Float32Array(n * 3), idx = [];
-    const cS = new THREE.Color(0x6fe0ea), cD = new THREE.Color(0x1f86c9), cc = new THREE.Color();
-    function boyash(i, x, z) {
-      const depth = Math.max(0, SUV_Y - yerBalandligi(KOL.x + x, KOL.z + z));
-      cc.copy(cS).lerp(cD, ss(0, 2.2, depth));
-      col[i * 3] = cc.r; col[i * 3 + 1] = cc.g; col[i * 3 + 2] = cc.b;
-    }
-    boyash(0, 0, 0);
-    for (let k = 1; k <= RS; k++) {
-      const r = RAD * k / RS;
-      for (let s = 0; s < SS; s++) {
-        const i = 1 + (k - 1) * SS + s, a = s / SS * Math.PI * 2;
-        pos[i * 3] = Math.cos(a) * r; pos[i * 3 + 1] = 0; pos[i * 3 + 2] = Math.sin(a) * r;
-        boyash(i, pos[i * 3], pos[i * 3 + 2]);
-      }
-    }
-    for (let s = 0; s < SS; s++) idx.push(0, 1 + (s + 1) % SS, 1 + s);
-    for (let k = 1; k < RS; k++) {
-      for (let s = 0; s < SS; s++) {
-        const a = 1 + (k - 1) * SS + s, b = 1 + (k - 1) * SS + (s + 1) % SS;
-        const c = 1 + k * SS + s, d = 1 + k * SS + (s + 1) % SS;
-        idx.push(a, b, c, b, d, c);
-      }
-    }
-    const g1 = new THREE.BufferGeometry();
-    g1.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-    g1.setAttribute('color', new THREE.BufferAttribute(col, 3));
-    g1.setIndex(idx);
-    const mat1 = new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.85, depthWrite: false, fog: false, toneMapped: false, side: THREE.DoubleSide });
-    suvMesh = new THREE.Mesh(g1, mat1);
-    suvMesh.position.set(KOL.x, SUV_Y, KOL.z);
-    suvMesh.renderOrder = 2;          // relyefdan keyin chiziladi
-    grup.add(suvMesh);
-
-    // 2) ustki qatlam: ko‘pik, to‘lqin, yaltirash
     suvMat = new THREE.ShaderMaterial({
       uniforms: {
         uT: { value: 0 },
@@ -207,12 +165,14 @@ const Dunyo = {};
       fragmentShader: [
         'uniform float uT; uniform vec2 uC; uniform float uR; varying vec3 vP;',
         'float ss(float a, float b, float x){ float t = clamp((x-a)/(b-a), 0.0, 1.0); return t*t*(3.0-2.0*t); }',
+        // ko‘l havzasining balandligi (dunyo.js dagi balandlik() bilan bir xil formula)
         'float kolH(vec2 p){',
         '  vec2 d = p - uC;',
         '  float th = atan(d.y, d.x);',
         '  float de = length(d) * (1.0 + 0.12*sin(3.0*th+0.7) + 0.07*sin(5.0*th+2.0));',
-        '  return ' + KOL_BANK.toFixed(3) + ' - ' + (KOL_BANK + 3.4).toFixed(3) + ' * ss(uR*0.8, uR*0.45, de);',
+        '  return 1.5 - 4.9 * ss(uR*0.8, uR*0.45, de);',
         '}',
+        // relyef to‘ri bo‘yicha interpolyatsiya
         'float yerH(vec2 p){',
         '  float S = ' + (BOYI / TER_SEG).toFixed(6) + ';',
         '  vec2 q = (p + ' + (BOYI / 2).toFixed(1) + ') / S;',
@@ -224,23 +184,24 @@ const Dunyo = {};
         '  return hc + (1.0-f.x)*(hb-hc) + (1.0-f.y)*(hd-hc);',
         '}',
         'void main(){',
+        '  float depth = max(' + SUV_Y.toFixed(3) + ' - yerH(vP.xz), 0.0);',
+        '  float dk = smoothstep(0.0, 2.2, depth);',
+        '  vec3 c = mix(vec3(0.435, 0.878, 0.918), vec3(0.122, 0.525, 0.788), dk);',   // #6fe0ea -> #1f86c9
+        // yumshoq harakatlanuvchi to‘lqin
+        '  float w = sin(vP.x*0.5+uT*0.8) + sin(vP.z*0.7-uT*0.6) + sin((vP.x+vP.z)*0.35+uT*0.45);',
+        '  c *= 1.0 + (w/3.0) * 0.06;',
+        // yaltirash
+        '  float sp = pow(max(sin(vP.x*1.7+uT*1.1)*sin(vP.z*1.9-uT*0.9), 0.0), 14.0);',
+        '  c += vec3(sp * 0.35);',
+        // qirg‘oq bo‘ylab oq ko‘pik chizig‘i (chuqurlik 0.3 dan kam)
         '  vec2 dd = vP.xz - uC;',
         '  float th = atan(dd.y, dd.x);',
-        '  float foam = 0.0;',
-        '  float he = ' + SUV_Y.toFixed(3) + ' - kolH(vP.xz);',            // taxminiy chuqurlik
-        '  if (he > -0.7 && he < 1.0) {',
-        '    float depth = max(' + SUV_Y.toFixed(3) + ' - yerH(vP.xz), 0.0);',
-        '    float wob = 0.04*sin(th*18.0+uT*1.6) + 0.03*sin(th*7.0-uT*1.1);',
-        '    foam = 1.0 - smoothstep(0.12 + wob, 0.30, depth);',             // faqat ingichka oq ko‘pik chizig‘i
-        '    foam *= 0.7 + 0.3*sin(th*45.0 + uT*0.9 + depth*25.0);',
-        '    foam = clamp(foam, 0.0, 1.0);',
-        '  }',
-        '  float w = sin(vP.x*0.5+uT*0.8) + sin(vP.z*0.7-uT*0.6) + sin((vP.x+vP.z)*0.35+uT*0.45);',
-        '  float yumshoq = 0.06 * (0.5 + w/6.0);',                           // yumshoq harakatlanuvchi to‘lqin
-        '  float sp = pow(max(sin(vP.x*1.7+uT*1.1)*sin(vP.z*1.9-uT*0.9), 0.0), 14.0);',   // yaltirash
-        '  float a = clamp(foam + yumshoq + sp*0.35, 0.0, 1.0);',
-        '  if (a < 0.003) discard;',
-        '  gl_FragColor = vec4(1.0, 1.0, 1.0, a);',
+        '  float wob = 0.04*sin(th*18.0+uT*1.6) + 0.03*sin(th*7.0-uT*1.1);',
+        '  float foam = 1.0 - smoothstep(0.12 + wob, 0.30, depth);',
+        '  foam *= 0.7 + 0.3*sin(th*45.0 + uT*0.9 + depth*25.0);',
+        '  foam = clamp(foam, 0.0, 1.0);',
+        '  c = mix(c, vec3(1.0), foam);',
+        '  gl_FragColor = vec4(c, max(0.85, foam));',
         '}'
       ].join('\n'),
       transparent: true,
@@ -248,12 +209,12 @@ const Dunyo = {};
       fog: false,
       toneMapped: false
     });
-    const g2 = new THREE.CircleGeometry(RAD, 64);
-    g2.rotateX(-Math.PI / 2);
-    const m2 = new THREE.Mesh(g2, suvMat);
-    m2.position.set(KOL.x, SUV_Y, KOL.z);
-    m2.renderOrder = 3;
-    grup.add(m2);
+    const g = new THREE.CircleGeometry(KOL.r * 0.95, 64);
+    g.rotateX(-Math.PI / 2);
+    suvMesh = new THREE.Mesh(g, suvMat);
+    suvMesh.position.set(KOL.x, SUV_Y, KOL.z);
+    suvMesh.renderOrder = 2;          // relyefdan keyin chiziladi
+    grup.add(suvMesh);
   }
 
   /* ---------- daraxtlar ---------- */
@@ -632,7 +593,7 @@ const Dunyo = {};
     otMat.uniforms.uT.value = t;
     const kam = Sahna.camera.position;
     otMat.uniforms.uP.value.set(kam.x, 0, kam.z);
-    if (suvMat) suvMat.uniforms.uT.value = t;
+    suvMat.uniforms.uT.value = t;
     if (otIsh) {
       if (otIsh.next().done) otIsh = null;
     } else {
