@@ -187,7 +187,7 @@ const Dunyo = {};
         '}',
         'void main(){',
         '  float depth = max(' + SUV_Y.toFixed(3) + ' - yerH(vP.xz), 0.0);',
-        '  float dk = smoothstep(0.0, 2.2, depth);',
+        '  float dk = smoothstep(0.0, ' + (SUV_Y - KOL_TUB).toFixed(2) + ', depth);',   // ko‘lning eng chuqur joyigacha: sayoz #6fe0ea -> chuqur #1f86c9
         '  vec3 c = mix(vec3(0.435, 0.878, 0.918), vec3(0.122, 0.525, 0.788), dk);',   // #6fe0ea -> #1f86c9
         // yumshoq harakatlanuvchi to‘lqin
         '  float w = sin(vP.x*0.5+uT*0.8) + sin(vP.z*0.7-uT*0.6) + sin((vP.x+vP.z)*0.35+uT*0.45);',
