@@ -62,9 +62,23 @@ const Dunyo = {};
   Dunyo.kol = KOL;
   Dunyo.suvY = SUV_Y;
   // Ko‘l ichida suv chuqurligi (ko‘ldan tashqarida 0)
+  // Ko‘rinadigan yer balandligi: relyef to‘ridagi (uchburchaklar bo‘yicha) balandlik.
+  // Personaj va kamera shunga tayanadi, shuning uchun qirg‘oqda yerga to‘g‘ri tegadi.
+  function yerBalandligi(x, z) {
+    const S = BOYI / TER_SEG, Y2 = BOYI / 2;
+    const q = (x + Y2) / S, r = (z + Y2) / S;
+    const ix = Math.floor(q), iy = Math.floor(r);
+    if (ix < 0 || iy < 0 || ix >= TER_SEG || iy >= TER_SEG) return balandlik(x, z);
+    const u = q - ix, v = r - iy;
+    const x0 = ix * S - Y2, z0 = iy * S - Y2;
+    const ha = balandlik(x0, z0), hb = balandlik(x0, z0 + S), hc = balandlik(x0 + S, z0 + S), hd = balandlik(x0 + S, z0);
+    return u + v <= 1 ? ha + u * (hd - ha) + v * (hb - ha) : hc + (1 - u) * (hb - hc) + (1 - v) * (hd - hc);
+  }
+  Dunyo.yer = yerBalandligi;
+  // Ko‘l ichida suv chuqurligi (suv sathi − yer balandligi; ko‘ldan tashqarida 0)
   Dunyo.suvChuqurligi = function (x, z) {
     if (kolMasofa(x, z) > KOL.r * 0.8) return 0;
-    return Math.max(0, SUV_Y - balandlik(x, z));
+    return Math.max(0, SUV_Y - yerBalandligi(x, z));
   };
 
   /* ---------- yer rangi (balandlikka qarab) ---------- */

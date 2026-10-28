@@ -50,7 +50,7 @@ const Kamera = {
       this.hedef.z + Math.cos(this.yaw) * cp * this.mesafe
     );
     // yerdan pastga tushmaydi
-    const yer = Math.max(Dunyo.balandlik(cam.position.x, cam.position.z), Dunyo.suvY) + 0.45;   // yerdan va suv yuzasidan pastga tushmaydi
+    const yer = Math.max(Dunyo.yer(cam.position.x, cam.position.z), Dunyo.suvY) + 0.45;   // yerdan va suv yuzasidan pastga tushmaydi
     if (cam.position.y < yer) cam.position.y = yer;
 
     // yugurganda ko‘rish burchagi biroz kengayadi

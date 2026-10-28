@@ -409,6 +409,8 @@ const SuvEffekti = {
     Sahna.scene.add(this.nuqta);
     this.t1 = 0;
     this.t2 = 0;
+    this.oxirgiTirik = 0;
+    this.nuqta.visible = false;   // sachrash bo‘lmaganda chizilmaydi (telefonda tejaydi)
   },
 
   halqa(x, z) {
@@ -456,8 +458,10 @@ const SuvEffekti = {
       h.m.scale.set(s, 1, s);
       h.m.material.opacity = 0.75 * Math.pow(Math.max(0, 1 - h.yosh / 1.3), 1.5);
     }
+    let tirik = 0;
     for (let i = 0; i < this.N; i++) {
       if (this.umr[i] <= 0) continue;
+      tirik++;
       this.vel[i * 3 + 1] -= 10 * dt;
       this.pos[i * 3] += this.vel[i * 3] * dt;
       this.pos[i * 3 + 1] += this.vel[i * 3 + 1] * dt;
@@ -465,7 +469,9 @@ const SuvEffekti = {
       this.umr[i] -= dt;
       if (this.umr[i] <= 0 || this.pos[i * 3 + 1] < Dunyo.suvY) { this.umr[i] = 0; this.pos[i * 3 + 1] = -50; }
     }
-    this.nuqta.geometry.attributes.position.needsUpdate = true;
+    if (tirik > 0 || this.oxirgiTirik > 0) this.nuqta.geometry.attributes.position.needsUpdate = true;
+    this.nuqta.visible = tirik > 0;
+    this.oxirgiTirik = tirik;
   }
 };
 
@@ -481,6 +487,7 @@ const Personaj = {
   chegara: 150,
   OLCHAM: 0.77,        // personaj o‘lchami (avvalgisidan ~23% kichik)
   suzish: false,
+  chiqish: 0,          // suvdan chiqqandan keyingi qisqa silliq o‘tish vaqti
 
   boshlash() {
     this.model = PersonajModeli.yarat();
@@ -541,17 +548,19 @@ const Personaj = {
     // suzish holati (ko‘l ichida chuqur joyda)
     const chuq = Dunyo.suvChuqurligi(pos.x, pos.z);
     const oldingi = this.suzish;
-    if (!this.suzish && chuq > 0.8) this.suzish = true;
-    else if (this.suzish && chuq < 0.5) this.suzish = false;
+    if (!this.suzish && chuq > 0.6) this.suzish = true;          // suv belgacha chiqsa, suza boshlaydi
+    else if (this.suzish && chuq < 0.35) this.suzish = false;    // sayozga chiqsa, yana yuradi
+    this.chiqish = Math.max(0, this.chiqish - dt);
+    if (oldingi && !this.suzish) this.chiqish = 0.5;
     if (this.suzish !== oldingi) {
       SuvEffekti.sachrash(pos.x, pos.z, 18, 1.0);
       SuvEffekti.halqa(pos.x, pos.z);
     }
 
     // yer ustida yoki suv yuzasida
-    let maqY = Dunyo.balandlik(pos.x, pos.z);
-    if (this.suzish) maqY = Dunyo.suvY - 0.36 + Math.sin(t * 2.6) * 0.035;
-    pos.y += (maqY - pos.y) * Math.min(1, (this.suzish ? 6 : 20) * dt);
+    let maqY = Dunyo.yer(pos.x, pos.z);
+    if (this.suzish) maqY = Dunyo.suvY - 0.36 + Math.sin(t * 2.6) * 0.05;   // suv yuzasida silkinib suzadi
+    pos.y += (maqY - pos.y) * Math.min(1, (this.suzish ? 6 : (this.chiqish > 0 ? 8 : 20)) * dt);   // qirg‘oqqa chiqqanda silliq ko‘tariladi
 
     this.tezlik01 = this.tezlik / this.MAX_TEZLIK;
     const modelTez = this.suzish ? Math.min(1, this.tezlik / (this.MAX_TEZLIK * 0.5)) : this.tezlik01;
