@@ -2,12 +2,14 @@
    sahna.js — sahna, yorug‘lik, osmon, soya, yordamchi funksiyalar
    ============================================================ */
 const Sahna = {
-  quyoshYoni: new THREE.Vector3(-0.55, 0.8, 0.45).normalize(),
-  ufqRangi: 0xcdeef2,
+  quyoshYoni: new THREE.Vector3(-0.6, 0.62, 0.5).normalize(),   // quyosh ~40° balandlikda (uzun real soyalar)
+  ufqRangi: 0xc3d3de,                                            // ufq tumani (real, och ko‘kish-kulrang)
+  // Real ko‘rinish sozlamalari (kerak bo‘lsa shu yerdan sozlanadi)
+  KO: { ekspozitsiya: 0.55, quyosh: 1.7, yarimShar: 0.6 },
   sifatlar: {
     past:   { pr: 1.0,  soya: false, xarita: 512 },
-    orta:   { pr: 1.25, soya: true,  xarita: 512 },
-    yuqori: { pr: 1.5,  soya: true,  xarita: 1024 }
+    orta:   { pr: 1.25, soya: true,  xarita: 1024 },
+    yuqori: { pr: 1.5,  soya: true,  xarita: 2048 }
   },
   bulutlar: [],
   _konturMat: {},
@@ -19,9 +21,13 @@ const Sahna = {
     r.setClearColor(this.ufqRangi);
     r.shadowMap.enabled = true;
     r.shadowMap.type = THREE.PCFSoftShadowMap;
+    // real rang: sRGB chiqish + kino (ACES) ton xaritalash
+    r.outputEncoding = THREE.sRGBEncoding;
+    r.toneMapping = THREE.ACESFilmicToneMapping;
+    r.toneMappingExposure = this.KO.ekspozitsiya;
 
     this.scene = new THREE.Scene();
-    this.scene.fog = new THREE.Fog(this.ufqRangi, 70, 260);
+    this.scene.fog = new THREE.Fog(this.lin(this.ufqRangi), 60, 320);
     this.camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.1, 700);
 
     this.gradientYasash();
@@ -42,15 +48,34 @@ const Sahna = {
     this.gradient = t;
   },
 
+  // sRGB (oddiy hex) rangni chiziqli rangga o‘tkazish (yorug‘lik hisobi uchun)
+  lin(hex) {
+    return new THREE.Color(hex).convertSRGBToLinear();
+  },
+
+  // Real (PBR) material. renk — oddiy hex. Vertex ranglar ham sRGB deb olinadi.
+  mat(renk, qoshimcha) {
+    const o = Object.assign({ roughness: 0.9, metalness: 0.0 }, qoshimcha || {});
+    delete o.gradientMap;
+    const m = new THREE.MeshStandardMaterial(o);
+    m.color = this.lin(renk);
+    m.onBeforeCompile = function (sh) {
+      sh.vertexShader = sh.vertexShader.replace('#include <color_vertex>',
+        '#include <color_vertex>\n#ifdef USE_COLOR\n  vColor.rgb = pow( vColor.rgb, vec3( 2.2 ) );\n#endif');
+    };
+    return m;
+  },
+
+  // eski nom (boshqa fayllar shuni chaqiradi): endi real material qaytaradi
   toon(renk, qoshimcha) {
-    return new THREE.MeshToonMaterial(Object.assign({ color: renk, gradientMap: this.gradient }, qoshimcha || {}));
+    return this.mat(renk, qoshimcha);
   },
 
   yorugliklar() {
-    this.yarimShar = new THREE.HemisphereLight(0xd4ecff, 0x86b872, 0.8);
+    this.yarimShar = new THREE.HemisphereLight(this.lin(0xbcd4f2), this.lin(0x5a5744), this.KO.yarimShar);
     this.scene.add(this.yarimShar);
 
-    const s = this.quyosh = new THREE.DirectionalLight(0xfff0cf, 1.05);
+    const s = this.quyosh = new THREE.DirectionalLight(this.lin(0xfff1d8), this.KO.quyosh);
     s.castShadow = true;
     s.shadow.mapSize.set(1024, 1024);
     const c = s.shadow.camera;
@@ -69,15 +94,17 @@ const Sahna = {
     stoplar.forEach(function (s) { gr.addColorStop(s[0], s[1]); });
     g.fillStyle = gr;
     g.fillRect(0, 0, olcham, olcham);
-    return new THREE.CanvasTexture(c);
+    const t = new THREE.CanvasTexture(c);
+    t.encoding = THREE.sRGBEncoding;
+    return t;
   },
 
   // Gradient osmon gumbazi (shader)
   osmonYasash() {
     const mat = new THREE.ShaderMaterial({
       uniforms: {
-        yuqori: { value: new THREE.Color(0x3d9be0) },
-        orta:   { value: new THREE.Color(0x78c6ee) },
+        yuqori: { value: new THREE.Color(0x2e63a6) },
+        orta:   { value: new THREE.Color(0x7aa3cc) },
         ufq:    { value: new THREE.Color(this.ufqRangi) },
         quyosh: { value: this.quyoshYoni.clone() }
       },
@@ -132,23 +159,25 @@ const Sahna = {
     lg.addColorStop(1, 'rgba(176,205,235,0.75)');
     g.fillStyle = lg;
     g.fillRect(0, 0, 256, 128);
-    return new THREE.CanvasTexture(c);
+    const t = new THREE.CanvasTexture(c);
+    t.encoding = THREE.sRGBEncoding;
+    return t;
   },
 
   quyoshVaBulutlar() {
     const disk = this._radial([[0, 'rgba(255,252,225,1)'], [0.42, 'rgba(255,244,190,1)'], [0.5, 'rgba(255,240,170,0)'], [1, 'rgba(255,240,170,0)']], 128);
     const nur = this._radial([[0, 'rgba(255,236,170,0.75)'], [0.3, 'rgba(255,226,150,0.28)'], [1, 'rgba(255,220,140,0)']], 128);
 
-    this.quyoshNuri = new THREE.Sprite(new THREE.SpriteMaterial({ map: nur, transparent: true, depthWrite: false, fog: false, blending: THREE.AdditiveBlending }));
+    this.quyoshNuri = new THREE.Sprite(new THREE.SpriteMaterial({ map: nur, transparent: true, depthWrite: false, fog: false, toneMapped: false, blending: THREE.AdditiveBlending }));
     this.quyoshNuri.scale.set(190, 190, 1);
     this.quyoshNuri.renderOrder = -99;
-    this.quyoshDiski = new THREE.Sprite(new THREE.SpriteMaterial({ map: disk, transparent: true, depthWrite: false, fog: false }));
+    this.quyoshDiski = new THREE.Sprite(new THREE.SpriteMaterial({ map: disk, transparent: true, depthWrite: false, fog: false, toneMapped: false }));
     this.quyoshDiski.scale.set(44, 44, 1);
     this.quyoshDiski.renderOrder = -98;
     this.scene.add(this.quyoshNuri, this.quyoshDiski);
 
     const bt = this._bulutTeksturasi();
-    const mat = new THREE.SpriteMaterial({ map: bt, transparent: true, depthWrite: false, fog: false, opacity: 0.95 });
+    const mat = new THREE.SpriteMaterial({ map: bt, transparent: true, depthWrite: false, fog: false, toneMapped: false, opacity: 0.95 });
     let urug = 7;
     const tasodif = function () { urug = (urug * 16807) % 2147483647; return urug / 2147483647; };
     for (let i = 0; i < 14; i++) {
@@ -277,22 +306,8 @@ const Sahna = {
     return this._konturMat[kalit];
   },
 
-  // Kontur (outline): orqa tomoni ko‘rinadigan, biroz kattalashtirilgan nusxa
+  // Kontur (outline) anime uslubiga xos edi; real uslubda ishlatilmaydi. Boshqa fayllar chaqirsa, hech narsa qilmaydi.
   kontur(mesh, q, rang) {
-    const g = mesh.geometry.clone();
-    this.yumshoqNormal(g);
-    const mat = this.konturMaterial(rang, q);
-    let o;
-    if (mesh.isInstancedMesh) {
-      o = new THREE.InstancedMesh(g, mat, mesh.count);
-      o.instanceMatrix = mesh.instanceMatrix;
-    } else {
-      o = new THREE.Mesh(g, mat);
-    }
-    o.frustumCulled = false;
-    o.castShadow = false;
-    o.receiveShadow = false;
-    mesh.add(o);
-    return o;
+    return null;
   }
 };

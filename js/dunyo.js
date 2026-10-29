@@ -85,8 +85,8 @@ const Dunyo = {};
 
   /* ---------- yer rangi (balandlikka qarab) ---------- */
   const RAMPA = [
-    [-4, 0x3a8fa3], [-0.8, 0x4fb0b8], [-0.3, 0xeadfa8], [0.5, 0xbfe08e], [1.5, 0x7bd47f],
-    [4, 0x55b96f], [7, 0x8fd27f], [10, 0xcdeaa5], [14, 0xf0f6d6]
+    [-4, 0x4d4332], [-0.8, 0x6a5d43], [-0.3, 0x8b7c58], [0.5, 0x6d7a42], [1.5, 0x4f6a34],
+    [4, 0x486332], [7, 0x5f6b3f], [10, 0x7d7f68], [14, 0xa4a59c]
   ].map(function (s) { return [s[0], new THREE.Color(s[1])]; });
   const _r = new THREE.Color();
   function yerRangi(h, x, z) {
@@ -140,7 +140,7 @@ const Dunyo = {};
     }
     geo.setAttribute('color', new THREE.BufferAttribute(ranglar, 3));
     geo.computeVertexNormals();
-    terra = new THREE.Mesh(geo, Sahna.toon(0xffffff, { vertexColors: true }));
+    terra = new THREE.Mesh(geo, Sahna.mat(0xffffff, { vertexColors: true, roughness: 1.0 }));
     terra.receiveShadow = true;
     grup.add(terra);
   }
@@ -251,16 +251,16 @@ const Dunyo = {};
       { g: ico, m: M4(0.1, 5.3, 0.1, 1.0, 0.9, 1.0) }
     ]);
 
-    tanaMesh = new THREE.InstancedMesh(tanaG, Sahna.toon(0x8d6249), n);
+    tanaMesh = new THREE.InstancedMesh(tanaG, Sahna.mat(0x4e3b2c, { roughness: 1.0 }), n);
     bargMesh = new THREE.InstancedMesh(bargG, Sahna.toon(0xffffff), n);
-    const palitra = [0x5fcf7a, 0x49b872, 0x7fd88a, 0x3fae8a, 0x9be08c].map(function (c) { return new THREE.Color(c); });
-    const gul = new THREE.Color(0xf6a8c8);
+    const palitra = [0x2d4a26, 0x36542b, 0x3f5d2d, 0x2a4530, 0x4a6532].map(function (c) { return Sahna.lin(c); });
     for (let i = 0; i < n; i++) {
       const t = royxat[i];
       const ry = rnd() * 6.283;
       matritsa(tanaMesh, i, t.x, t.h - 0.2, t.z, ry, t.s, t.s * (0.9 + rnd() * 0.3), t.s);
       matritsa(bargMesh, i, t.x, t.h - 0.2, t.z, ry, t.s, t.s * (0.9 + rnd() * 0.3), t.s);
-      bargMesh.setColorAt(i, rnd() < 0.1 ? gul : palitra[Math.floor(rnd() * palitra.length)]);
+      rnd();
+      bargMesh.setColorAt(i, palitra[Math.floor(rnd() * palitra.length)]);
       toqnashuvDaraxt.push({ x: t.x, z: t.z, r: 0.42 * t.s });
     }
     [tanaMesh, bargMesh].forEach(function (m) {
@@ -285,7 +285,7 @@ const Dunyo = {};
       -0.5, 0, 0,   0.5, 0, 0,   -0.25, 0.5, 0,   0.25, 0.5, 0,   0, 1, 0
     ], 3));
     g.setAttribute('color', new THREE.Float32BufferAttribute([
-      0.08, 0.30, 0.16,   0.08, 0.30, 0.16,   0.23, 0.58, 0.32,   0.23, 0.58, 0.32,   0.66, 0.90, 0.44
+      0.10, 0.17, 0.06,   0.10, 0.17, 0.06,   0.22, 0.34, 0.11,   0.22, 0.34, 0.11,   0.45, 0.55, 0.22
     ], 3));
     g.setIndex([0, 1, 2, 1, 3, 2, 2, 3, 4]);
 
@@ -449,9 +449,9 @@ const Dunyo = {};
       }
     }
     const nM = markazlar.length;
-    gulSaqich = new THREE.InstancedMesh(stemG, Sahna.toon(0x4fae5f), MAX_GUL);
+    gulSaqich = new THREE.InstancedMesh(stemG, Sahna.mat(0x4f7a3a), MAX_GUL);
     gulBosh = new THREE.InstancedMesh(boshG, Sahna.toon(0xffffff), MAX_GUL);
-    const ranglar = [0xff8fb8, 0xffd86b, 0xffffff, 0xb79cff, 0xff9a6b].map(function (c) { return new THREE.Color(c); });
+    const ranglar = [0xe8d34a, 0xf0f0e8, 0x8d6fb5, 0xc4523f, 0xf0f0e8].map(function (c) { return Sahna.lin(c); });
     let n = 0;
     for (let j = 0; n < MAX_GUL && nM > 0; j++) {
       for (let c = 0; c < nM && n < MAX_GUL; c++) {
@@ -479,7 +479,7 @@ const Dunyo = {};
   function toshYasa() {
     const g = new THREE.DodecahedronGeometry(1, 0);
     toshMesh = new THREE.InstancedMesh(g, Sahna.toon(0xffffff), MAX_TOSH);
-    const ranglar = [0xa9b8c9, 0xb8aea0, 0x9aa9b6].map(function (c) { return new THREE.Color(c); });
+    const ranglar = [0x8a8982, 0x77736b, 0x9b968b].map(function (c) { return Sahna.lin(c); });
     let n = 0, urinish = 0;
     while (n < MAX_TOSH && urinish < 600) {
       urinish++;
@@ -607,9 +607,9 @@ const Dunyo = {};
 
   // Grafika sifatiga qarab ob’ektlar sonini o‘zgartirish
   const SIFAT = {
-    past:   { d: 90,  gg: 1.4, o: 6000, g: 120, z: 40 },
-    orta:   { d: 160, gg: 1.0, o: 15000, g: 250, z: 90 },
-    yuqori: { d: 240, gg: 0.6, o: 40000, g: 400, z: 150 }
+    past:   { d: 90,  gg: 1.4, o: 6000, g: 120, z: 0 },
+    orta:   { d: 160, gg: 1.0, o: 15000, g: 250, z: 0 },
+    yuqori: { d: 240, gg: 0.6, o: 40000, g: 400, z: 0 }
   };
   Dunyo.sifatOrnat = function (nom, p) {
     const q = SIFAT[nom];
