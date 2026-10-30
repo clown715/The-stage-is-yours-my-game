@@ -48,7 +48,7 @@ const Dunyo = {};
     const th = Math.atan2(dz, dx);
     return Math.hypot(dx, dz) * (1 + 0.12 * Math.sin(3 * th + 0.7) + 0.07 * Math.sin(5 * th + 2.0));
   }
-  function balandlik(x, z) {
+  function kolBalandlik(x, z) {
     let h = (fbm(x * 0.012, z * 0.012) - 0.5) * 30;
     const d0 = Math.hypot(x, z);
     h = h * (0.15 + 0.85 * ss(6, 40, d0)) + 1.6 * (1 - ss(0, 50, d0));
@@ -60,7 +60,99 @@ const Dunyo = {};
     if (h < pastki) h = pastki;
     return h;
   }
+
+  /* ---------- daryo: ko‘lga quyiladigan oqar daryo ---------- */
+  const RIV_HW = 3.6;                    // suv kengligining yarmi (m)
+  const RIV_IN = 2.5;                    // qirg‘oq ko‘tariladigan kenglik (m)
+  const RIV_BL = 14;                     // qirg‘oqdan atrofga aralashish kengligi (m)
+  const RIV_MARG = RIV_HW + RIV_IN + RIV_BL;
+  const RIV_L0 = 2.0, RIV_L1 = SUV_Y;    // suv sathi: boshida 2.0, ko‘lga quyilganda ko‘l sathi
+  const RIV = { px: [], pz: [], cum: [], len: [], S: 0, grid: null };
+  (function daryoQur() {
+    // daryo o‘qining nazorat nuqtalari (shimoli-g‘arbdan ko‘lning g‘arbiy qirg‘og‘iga)
+    const C = [[-150, -150], [-115, -118], [-92, -80], [-62, -66], [-40, -92], [-14, -86], [6, -62], [22, -40], [33, -33]];
+    const pts = [];
+    for (let i = 0; i < C.length - 1; i++) {
+      const p0 = C[Math.max(i - 1, 0)], p1 = C[i], p2 = C[i + 1], p3 = C[Math.min(i + 2, C.length - 1)];
+      for (let k = 0; k < 16; k++) {
+        const t = k / 16, t2 = t * t, t3 = t2 * t;
+        const f = function (a, b, c, d) { return 0.5 * (2 * b + (-a + c) * t + (2 * a - 5 * b + 4 * c - d) * t2 + (-a + 3 * b - 3 * c + d) * t3); };
+        pts.push([f(p0[0], p1[0], p2[0], p3[0]), f(p0[1], p1[1], p2[1], p3[1])]);
+      }
+    }
+    pts.push(C[C.length - 1]);
+    let cum = 0;
+    for (let i = 0; i < pts.length; i++) {
+      RIV.px.push(pts[i][0]); RIV.pz.push(pts[i][1]);
+      if (i > 0) { const l = Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]); RIV.len.push(l); cum += l; }
+      RIV.cum.push(cum);
+    }
+    RIV.S = cum;
+    // tezkor qidirish uchun to‘r (har katakda yaqin segmentlar ro‘yxati)
+    const CELL = 8, m = RIV_MARG + CELL;
+    let minX = 1e9, minZ = 1e9, maxX = -1e9, maxZ = -1e9;
+    for (let i = 0; i < pts.length; i++) {
+      minX = Math.min(minX, pts[i][0]); maxX = Math.max(maxX, pts[i][0]);
+      minZ = Math.min(minZ, pts[i][1]); maxZ = Math.max(maxZ, pts[i][1]);
+    }
+    minX -= m; minZ -= m; maxX += m; maxZ += m;
+    const nx = Math.ceil((maxX - minX) / CELL) + 1, nz = Math.ceil((maxZ - minZ) / CELL) + 1;
+    const cells = new Array(nx * nz);
+    for (let i = 0; i < pts.length - 1; i++) {
+      const x0 = Math.min(pts[i][0], pts[i + 1][0]) - RIV_MARG, x1 = Math.max(pts[i][0], pts[i + 1][0]) + RIV_MARG;
+      const z0 = Math.min(pts[i][1], pts[i + 1][1]) - RIV_MARG, z1 = Math.max(pts[i][1], pts[i + 1][1]) + RIV_MARG;
+      for (let cz = Math.floor((z0 - minZ) / CELL); cz <= Math.floor((z1 - minZ) / CELL); cz++) {
+        for (let cx = Math.floor((x0 - minX) / CELL); cx <= Math.floor((x1 - minX) / CELL); cx++) {
+          const k = cz * nx + cx;
+          (cells[k] || (cells[k] = [])).push(i);
+        }
+      }
+    }
+    RIV.grid = { minX: minX, minZ: minZ, cell: CELL, nx: nx, nz: nz, cells: cells };
+  })();
+
+  let rd = 1e9, rL = SUV_Y, rS = 0;      // eng yaqin daryo nuqtasigacha masofa, shu yerdagi suv sathi va o‘q bo‘yicha joy
+  function daryoYaqin(x, z) {
+    rd = 1e9;
+    const G = RIV.grid;
+    const cx = Math.floor((x - G.minX) / G.cell), cz = Math.floor((z - G.minZ) / G.cell);
+    if (cx < 0 || cz < 0 || cx >= G.nx || cz >= G.nz) return;
+    const list = G.cells[cz * G.nx + cx];
+    if (!list) return;
+    let best = 1e18, bs = 0;
+    for (let k = 0; k < list.length; k++) {
+      const i = list[k];
+      const ax = RIV.px[i], az = RIV.pz[i], bx = RIV.px[i + 1] - ax, bz = RIV.pz[i + 1] - az;
+      let t = ((x - ax) * bx + (z - az) * bz) / (bx * bx + bz * bz);
+      t = t < 0 ? 0 : (t > 1 ? 1 : t);
+      const dx = x - (ax + bx * t), dz = z - (az + bz * t);
+      const d2 = dx * dx + dz * dz;
+      if (d2 < best) { best = d2; bs = RIV.cum[i] + t * RIV.len[i]; }
+    }
+    rd = Math.sqrt(best);
+    rS = bs;
+    rL = RIV_L0 + (RIV_L1 - RIV_L0) * (bs / RIV.S);
+  }
+  function daryoD(x, z) { daryoYaqin(x, z); return rd; }
+
+  // daryo o‘zani va qirg‘oqlarini relyefga qo‘shish (hl — ko‘l hisobidan keyingi balandlik)
+  function daryoBalandlik(hl, x, z) {
+    daryoYaqin(x, z);
+    if (rd > RIV_MARG) return hl;
+    const L = rL, d = rd;
+    let hp;
+    if (d < RIV_HW) { const u = d / RIV_HW; hp = L - 0.05 - 1.1 * (1 - u * u); }          // o‘zan: o‘rtasi 1.15 chuqur
+    else if (d < RIV_HW + RIV_IN) hp = L - 0.05 + 0.6 * ss(0, 1, (d - RIV_HW) / RIV_IN);   // qirg‘oq ko‘tariladi
+    else hp = L + 0.55;                                                                      // qirg‘oq usti: suvdan 0.55 baland
+    const w = 1 - ss(RIV_HW + RIV_IN, RIV_MARG, d);
+    let hm = hl + (hp - hl) * w;
+    const wl = 1 - ss(KOL.r * 1.1, KOL.r * 1.4, kolMasofa(x, z));                           // ko‘l yaqinida ko‘l tubi pasaymasin
+    if (wl > 0 && hl < hm) hm += (hl - hm) * wl;
+    return hm;
+  }
+  function balandlik(x, z) { return daryoBalandlik(kolBalandlik(x, z), x, z); }
   Dunyo.balandlik = balandlik;
+  Dunyo.daryo = RIV;
   Dunyo.kol = KOL;
   Dunyo.suvY = SUV_Y;
   // Ko‘l ichida suv chuqurligi (ko‘ldan tashqarida 0)
@@ -79,8 +171,18 @@ const Dunyo = {};
   Dunyo.yer = yerBalandligi;
   // Ko‘l ichida suv chuqurligi (suv sathi − yer balandligi; ko‘ldan tashqarida 0)
   Dunyo.suvChuqurligi = function (x, z) {
-    if (kolMasofa(x, z) > KOL.r * 0.8) return 0;
-    return Math.max(0, SUV_Y - yerBalandligi(x, z));
+    if (kolMasofa(x, z) <= KOL.r * 0.8) return Math.max(0, SUV_Y - yerBalandligi(x, z));   // ko‘l
+    daryoYaqin(x, z);
+    if (rd < RIV_HW + 1.0) return Math.max(0, rL - yerBalandligi(x, z));                    // daryo
+    return 0;
+  };
+  // Shu nuqtadagi suv sathi (ko‘lda ko‘l sathi, daryoda daryo sathi)
+  Dunyo.suvDarajasi = function (x, z) {
+    if (kolMasofa(x, z) > KOL.r * 0.8) {
+      daryoYaqin(x, z);
+      if (rd < RIV_HW + 1.0) return rL;
+    }
+    return SUV_Y;
   };
 
   /* ---------- yer rangi (balandlikka qarab) ---------- */
@@ -89,6 +191,7 @@ const Dunyo = {};
     [4, 0x486332], [7, 0x5f6b3f], [10, 0x7d7f68], [14, 0xa4a59c]
   ].map(function (s) { return [s[0], new THREE.Color(s[1])]; });
   const _r = new THREE.Color();
+  const DARYO_QUM = new THREE.Color(0x7d7058);   // daryo tubi va sohili: qum-shag‘al
   function yerRangi(h, x, z) {
     let i = 0;
     while (i < RAMPA.length - 2 && h > RAMPA[i + 1][0]) i++;
@@ -136,6 +239,8 @@ const Dunyo = {};
       const h = balandlik(x, z);
       p.setY(i, h);
       const c = yerRangi(h, x, z);
+      const dr = daryoD(x, z);
+      if (dr < RIV_HW + 4) c.lerp(DARYO_QUM, 0.85 * (1 - ss(RIV_HW - 0.5, RIV_HW + 4, dr)));
       ranglar[i * 3] = c.r; ranglar[i * 3 + 1] = c.g; ranglar[i * 3 + 2] = c.b;
     }
     geo.setAttribute('color', new THREE.BufferAttribute(ranglar, 3));
@@ -219,6 +324,85 @@ const Dunyo = {};
     grup.add(suvMesh);
   }
 
+  /* ---------- daryo suvi: oqayotgan suv (shader, o‘z rangini o‘zi hisoblaydi) ---------- */
+  let daryoMat = null;
+  function daryoYasa() {
+    const U = [-1.25, -0.85, -0.4, 0, 0.4, 0.85, 1.25];       // ko‘ndalang joylar (suv chetidan kengroq — qirg‘oq ostida yashirinadi)
+    const n = RIV.px.length, nu = U.length;
+    const pos = new Float32Array(n * nu * 3), au = new Float32Array(n * nu), as = new Float32Array(n * nu), idx = [];
+    for (let i = 0; i < n; i++) {
+      const a = Math.max(i - 1, 0), b = Math.min(i + 1, n - 1);
+      let tx = RIV.px[b] - RIV.px[a], tz = RIV.pz[b] - RIV.pz[a];
+      const tl = Math.hypot(tx, tz) || 1;
+      tx /= tl; tz /= tl;
+      const nx = -tz, nz = tx;
+      const L = RIV_L0 + (RIV_L1 - RIV_L0) * (RIV.cum[i] / RIV.S);
+      for (let j = 0; j < nu; j++) {
+        const k = i * nu + j;
+        pos[k * 3] = RIV.px[i] + nx * U[j] * RIV_HW;
+        pos[k * 3 + 1] = L;
+        pos[k * 3 + 2] = RIV.pz[i] + nz * U[j] * RIV_HW;
+        au[k] = U[j];
+        as[k] = RIV.cum[i];
+      }
+    }
+    for (let i = 0; i < n - 1; i++) {
+      for (let j = 0; j < nu - 1; j++) {
+        const a = i * nu + j, b = a + 1, c = a + nu, d = c + 1;
+        idx.push(a, c, b, b, c, d);
+      }
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    g.setAttribute('aU', new THREE.BufferAttribute(au, 1));
+    g.setAttribute('aS', new THREE.BufferAttribute(as, 1));
+    g.setIndex(idx);
+    daryoMat = new THREE.ShaderMaterial({
+      uniforms: { uT: { value: 0 } },
+      vertexShader: [
+        'attribute float aU; attribute float aS;',
+        'varying float vU; varying float vS; varying vec3 vP;',
+        'void main(){',
+        '  vec4 wp = modelMatrix * vec4(position, 1.0);',
+        '  vP = wp.xyz; vU = aU; vS = aS;',
+        '  gl_Position = projectionMatrix * viewMatrix * wp;',
+        '}'
+      ].join('\n'),
+      fragmentShader: [
+        'uniform float uT; varying float vU; varying float vS; varying vec3 vP;',
+        'void main(){',
+        '  float au = abs(vU);',
+        '  float depth = 1.1 * max(0.0, 1.0 - au*au);',                                   // o‘zan o‘rtasi chuqur, chetlari sayoz
+        '  float dk = smoothstep(0.0, 1.1, depth);',
+        '  vec3 c = mix(vec3(0.435, 0.878, 0.918), vec3(0.122, 0.525, 0.788), dk);',    // #6fe0ea -> #1f86c9
+        // oqim: yuza chiziqlari oqim bo‘ylab harakatlanadi
+        '  float f1 = sin(vS*0.8 - uT*2.4 + sin(vU*3.0 + vS*0.15)*1.6);',
+        '  float f2 = sin(vS*1.9 - uT*3.6 + vU*4.0);',
+        '  float streak = pow(max(f1*f2, 0.0), 3.0);',
+        '  c += vec3(streak * 0.22);',
+        '  c *= 1.0 + 0.05*sin(vS*0.5 - uT*1.5 + vU*2.0);',
+        '  float sp = pow(max(sin(vP.x*1.7+uT*1.1)*sin(vP.z*1.9-uT*0.9), 0.0), 14.0);',   // yaltirash
+        '  c += vec3(sp * 0.3);',
+        // qirg‘oq bo‘ylab ingichka oq ko‘pik
+        '  float foam = 1.0 - smoothstep(0.10, 0.28, depth);',
+        '  foam *= 0.65 + 0.35*sin(vS*3.0 - uT*2.0 + vU*6.0);',
+        '  foam = clamp(foam, 0.0, 1.0);',
+        '  c = mix(c, vec3(1.0), foam * 0.9);',
+        '  gl_FragColor = vec4(c, max(0.85, foam));',
+        '}'
+      ].join('\n'),
+      side: THREE.DoubleSide,
+      transparent: true,
+      depthWrite: false,
+      fog: false,
+      toneMapped: false
+    });
+    const m = new THREE.Mesh(g, daryoMat);
+    m.frustumCulled = false;
+    m.renderOrder = 2;
+    grup.add(m);
+  }
+
   /* ---------- daraxtlar ---------- */
   function daraxtYasa() {
     const royxat = [];
@@ -228,6 +412,7 @@ const Dunyo = {};
       const x = (rnd() - 0.5) * 400, z = (rnd() - 0.5) * 400;
       if (Math.hypot(x, z) < 9) continue;
       if (Math.hypot(x - KOL.x, z - KOL.z) < KOL.r * 1.1) continue;
+      if (daryoD(x, z) < RIV_HW + 4) continue;
       if (vn(x * 0.025 + 11, z * 0.025 - 7) < 0.35 + rnd() * 0.2) continue;
       const h = balandlik(x, z);
       if (h < 0.3) continue;
@@ -360,6 +545,7 @@ const Dunyo = {};
         const dx = x - cx, dz = z - cz;
         if (dx * dx + dz * dz > OT_R * OT_R) continue;
         if (Math.hypot(x - KOL.x, z - KOL.z) < KOL.r * 0.98) continue;
+        if (daryoD(x, z) < RIV_HW + 1.5) continue;
         const yer = balandlik(x, z);
         if (yer < 0.2) continue;                      // past (qumli) joyda o‘t o‘smaydi
         const katta = ss(0.3, 0.62, vn(x * 0.045 + 20, z * 0.045 - 9));
@@ -443,6 +629,7 @@ const Dunyo = {};
         const x = (rnd() - 0.5) * 300, z = (rnd() - 0.5) * 300;
         if (Math.hypot(x, z) < 6) continue;
         if (Math.hypot(x - KOL.x, z - KOL.z) < KOL.r * 1.05) continue;
+        if (daryoD(x, z) < RIV_HW + 6) continue;
         if (balandlik(x, z) < 0.5) continue;
         markazlar.push({ x: x, z: z });
         break;
@@ -458,7 +645,7 @@ const Dunyo = {};
         const a = rnd() * 6.283, d = 4.5 * Math.sqrt(rnd());
         const x = markazlar[c].x + Math.cos(a) * d, z = markazlar[c].z + Math.sin(a) * d;
         const h = balandlik(x, z);
-        if (h < 0.4 || Math.hypot(x - KOL.x, z - KOL.z) < KOL.r * 1.0) { continue; }
+        if (h < 0.4 || Math.hypot(x - KOL.x, z - KOL.z) < KOL.r * 1.0 || daryoD(x, z) < RIV_HW + 2) { continue; }
         const sh = 0.25 + rnd() * 0.25, s = 0.9 + rnd() * 0.7;
         matritsa(gulSaqich, n, x, h, z, 0, 1, sh, 1);
         matritsa(gulBosh, n, x, h + sh, z, rnd() * 6.283, s);
@@ -491,6 +678,7 @@ const Dunyo = {};
         x = (rnd() - 0.5) * 380; z = (rnd() - 0.5) * 380;
       }
       if (Math.hypot(x, z) < 7) continue;
+      if (daryoD(x, z) < RIV_HW + 3) continue;
       const h = balandlik(x, z);
       if (h < 0.0) continue;
       const sx = 0.6 + rnd() * 1.0, sy = 0.4 + rnd() * 0.6, sz = 0.6 + rnd() * 1.0;
@@ -584,6 +772,7 @@ const Dunyo = {};
     Sahna.scene.add(grup);
     relyefYasa();
     suvYasa();
+    daryoYasa();
     daraxtYasa();
     otYasa();
     gulYasa();
@@ -596,6 +785,7 @@ const Dunyo = {};
     const kam = Sahna.camera.position;
     otMat.uniforms.uP.value.set(kam.x, 0, kam.z);
     suvMat.uniforms.uT.value = t;
+    if (daryoMat) daryoMat.uniforms.uT.value = t;
     if (otIsh) {
       if (otIsh.next().done) otIsh = null;
     } else {

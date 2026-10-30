@@ -390,6 +390,7 @@ const SuvEffekti = {
     this.pos = new Float32Array(N * 3);
     this.vel = new Float32Array(N * 3);
     this.umr = new Float32Array(N);
+    this.suY = new Float32Array(N);
     for (let i = 0; i < N; i++) this.pos[i * 3 + 1] = -50;
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.BufferAttribute(this.pos, 3));
@@ -418,7 +419,7 @@ const SuvEffekti = {
       const h = this.halqalar[i];
       if (h.yosh >= 1.3) {
         h.yosh = 0;
-        h.m.position.set(x, Dunyo.suvY + 0.03, z);
+        h.m.position.set(x, Dunyo.suvDarajasi(x, z) + 0.03, z);
         h.m.visible = true;
         return;
       }
@@ -431,7 +432,8 @@ const SuvEffekti = {
       if (this.umr[i] > 0) continue;
       this.umr[i] = 0.6 + Math.random() * 0.4;
       this.pos[i * 3] = x + (Math.random() - 0.5) * 0.4;
-      this.pos[i * 3 + 1] = Dunyo.suvY + 0.05;
+      this.suY[i] = Dunyo.suvDarajasi(x, z);
+      this.pos[i * 3 + 1] = this.suY[i] + 0.05;
       this.pos[i * 3 + 2] = z + (Math.random() - 0.5) * 0.4;
       this.vel[i * 3] = (Math.random() - 0.5) * 2.2 * kuch;
       this.vel[i * 3 + 1] = 2 + Math.random() * 2 * kuch;
@@ -467,7 +469,7 @@ const SuvEffekti = {
       this.pos[i * 3 + 1] += this.vel[i * 3 + 1] * dt;
       this.pos[i * 3 + 2] += this.vel[i * 3 + 2] * dt;
       this.umr[i] -= dt;
-      if (this.umr[i] <= 0 || this.pos[i * 3 + 1] < Dunyo.suvY) { this.umr[i] = 0; this.pos[i * 3 + 1] = -50; }
+      if (this.umr[i] <= 0 || this.pos[i * 3 + 1] < this.suY[i]) { this.umr[i] = 0; this.pos[i * 3 + 1] = -50; }
     }
     if (tirik > 0 || this.oxirgiTirik > 0) this.nuqta.geometry.attributes.position.needsUpdate = true;
     this.nuqta.visible = tirik > 0;
@@ -559,7 +561,7 @@ const Personaj = {
 
     // yer ustida yoki suv yuzasida
     let maqY = Dunyo.yer(pos.x, pos.z);
-    if (this.suzish) maqY = Dunyo.suvY - 0.36 + Math.sin(t * 2.6) * 0.05;   // suv yuzasida silkinib suzadi
+    if (this.suzish) maqY = Dunyo.suvDarajasi(pos.x, pos.z) - 0.36 + Math.sin(t * 2.6) * 0.05;   // suv yuzasida silkinib suzadi
     pos.y += (maqY - pos.y) * Math.min(1, (this.suzish ? 6 : (this.chiqish > 0 ? 8 : 20)) * dt);   // qirg‘oqqa chiqqanda silliq ko‘tariladi
 
     this.tezlik01 = this.tezlik / this.MAX_TEZLIK;
